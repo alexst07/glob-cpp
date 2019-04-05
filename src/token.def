@@ -1,0 +1,18 @@
+#ifndef TOKEN
+#define TOKEN(name, str)
+#endif
+
+TOKEN(EOS,         "end of source")
+TOKEN(PLUS,        "+")
+TOKEN(SUB,         "-")
+TOKEN(STAR,        "*")
+TOKEN(QUESTION,    "?")
+TOKEN(LPAREN,      "(")
+TOKEN(RPAREN,      ")")
+TOKEN(UNION,       "|")
+TOKEN(AT,          "@")
+TOKEN(LBRACKET,    "[")
+TOKEN(RBRACKET,    "]")
+TOKEN(NEGLBRACKET, "[^")
+
+#undef TOKEN

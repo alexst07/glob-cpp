@@ -1,4 +1,5 @@
-<union>             ::= <glob> "|" <basic-glob>
+<glob>              ::= <union> | <concat-glob>
+<union>             ::= <glob> "|" <concat-glob>
 <concat-glob>       ::= <basic-glob> | <basic-glob> <concat-glob>;
 <basic-glob>        ::= <group>
                       | <any>
@@ -12,7 +13,7 @@
                       | <plus-group>
                       | <neg-group>
                       | <at-group>;
-
+<basic-group>       ::= "(" <glob> ")"
 <any-group>         ::= "?" <basic-group>;
 <star-group>        ::= "*" <basic-group>;
 <plus-group>        ::= "+" <basic-group>;

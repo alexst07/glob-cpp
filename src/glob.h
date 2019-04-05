@@ -5,6 +5,17 @@
 
 class Automata;
 
+class Error: public std::exception {
+ public:
+  Error(const std::string& msg): msg_{msg} {}
+
+  const char* what() const throw() override {
+    return msg_.c_str();
+  }
+ private:
+  std::string msg_;
+};
+
 enum class StateType {
   MATCH,
   FAIL,
@@ -186,6 +197,175 @@ class StateMult : public State {
 
     return std::tuple<size_t, size_t>(GetNextStates()[0], pos + 1);
   }
+};
+
+enum class TokenKind {
+  UNKNOWN = 0,
+  CHAR,
+  #define TOKEN(X, Y) X,
+  #include "token.def"
+  NUM_TOKENS
+};
+
+static const char* token_name_str[] = {
+  "UNKNOWN", // UNKNOWN
+  "CHAR",
+#define TOKEN(X, Y) #X,
+#include "token.def"
+  ""
+};
+
+class Token {
+ public:
+  Token(TokenKind kind): kind_{kind} {}
+  Token(TokenKind kind, char value): kind_{kind}, value_{value} {}
+  TokenKind Kind() const {
+    return kind_;
+  }
+
+  char Value() const {
+    return value_;
+  }
+ private:
+  friend std::ostream& operator<<(std::ostream& stream, const Token& token);
+  TokenKind kind_;
+  char value_;
+};
+
+inline std::ostream& operator<<(std::ostream& stream, const Token& token) {
+  stream  << '[' << token_name_str[static_cast<int>(token.kind_)] << ']';
+  return stream;
+}
+
+class Lexer {
+ public:
+  static const char kEndOfInput = -1;
+
+  Lexer(const std::string& str): str_(str), pos_{0}, c_{str[0]} {}
+
+  std::vector<Token> Scanner() {
+    std::vector<Token> tokens;
+    while(true) {
+      switch (c_) {
+        case '?': {
+          tokens.push_back(Select(TokenKind::QUESTION));
+          Advance();
+          break;
+        }
+
+        case '*': {
+          tokens.push_back(Select(TokenKind::STAR));
+          Advance();
+          break;
+        }
+
+        case '+': {
+          tokens.push_back(Select(TokenKind::PLUS));
+          Advance();
+          break;
+        }
+
+        case '-': {
+          tokens.push_back(Select(TokenKind::SUB));
+          Advance();
+          break;
+        }
+
+        case '@': {
+          tokens.push_back(Select(TokenKind::AT));
+          Advance();
+          break;
+        }
+
+        case '(': {
+          tokens.push_back(Select(TokenKind::LPAREN));
+          Advance();
+          break;
+        }
+
+        case ')': {
+          tokens.push_back(Select(TokenKind::RPAREN));
+          Advance();
+          break;
+        }
+
+        case '[': {
+          Advance();
+          if (c_ == '^') {
+            tokens.push_back(Select(TokenKind::NEGLBRACKET));
+            Advance();
+          } else {
+            tokens.push_back(Select(TokenKind::LBRACKET));
+          }
+          break;
+        }
+
+        case ']': {
+          tokens.push_back(Select(TokenKind::RBRACKET));
+          Advance();
+          break;
+        }
+
+        case '\\': {
+          Advance();
+          if (c_ == kEndOfInput) {
+            throw Error("No valid char after '\\'");
+          } else if (IsSpecialChar(c_)) {
+            tokens.push_back(Select(TokenKind::CHAR, c_));
+            Advance();
+          }
+          break;
+        }
+
+        default: {
+          if (c_ == kEndOfInput) {
+            tokens.push_back(Select(TokenKind::EOS));
+            return tokens;
+          } else {
+            tokens.push_back(Select(TokenKind::CHAR, c_));
+            Advance();
+          }
+        }
+      }
+    }
+  }
+ private:
+  inline Token Select(TokenKind k) {
+    return Token(k);
+  }
+
+  inline Token Select(TokenKind k, char value) {
+    return Token(k, value);
+  }
+
+  void Advance() {
+    if (pos_ == (str_.length() - 1)) {
+      c_ = kEndOfInput;
+      return;
+    }
+
+    c_ = str_[++pos_];
+  }
+
+  inline bool IsSpecialChar(char c) {
+    bool b = c != '?' &&
+             c != '*' &&
+             c != '+' &&
+             c != '^' &&
+             c != '(' &&
+             c != ')' &&
+             c != '[' &&
+             c != ']' &&
+             c != '|' &&
+             c != '!' &&
+             c != '@' &&
+             c != '\\';
+    return b;
+  }
+
+  std::string str_;
+  size_t pos_;
+  char c_;
 };
 
 
