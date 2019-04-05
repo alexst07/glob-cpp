@@ -369,6 +369,160 @@ class Lexer {
 };
 
 
+class AstNode {
+ public:
+  enum class Type {
+    CHAR,
+    RANGE,
+    SET_ITEM,
+    SET_ITEMS,
+    POS_SET,
+    NEG_SET,
+    SET,
+    STAR,
+    ANY,
+    GROUP,
+    BASIC_GLOB,
+    CONCAT_GLOB,
+    UNION,
+    GLOB
+  };
+
+  Type GetType() const {
+    return type_;
+  }
+
+ protected:
+  AstNode(Type type): type_{type} {}
+
+ private:
+  Type type_;
+};
+
+class CharNode: public AstNode {
+ public:
+  CharNode(char c): AstNode(Type::CHAR), c_{c} {}
+
+  char GetValue() const {
+    return c_;
+  }
+
+ private:
+  char c_;
+};
+
+class RangeNode: public AstNode {
+ public:
+  RangeNode(char start, char end)
+    : AstNode(Type::RANGE)
+    , start_{start_}
+    , end_{end} {}
+
+  char GetStart() const {
+    return start_;
+  }
+
+  char GetEnd() const {
+    return end_;
+  }
+
+ private:
+  char start_;
+  char end_;
+};
+
+class SetItemNode: public AstNode {
+ public:
+  SetItemNode(std::unique_ptr<AstNode>&& item)
+    : AstNode(Type::SET_ITEM)
+    , item_{std::move(item)} {}
+
+  AstNode* GetItem() {
+    return item_.get();
+  }
+
+ private:
+  std::unique_ptr<AstNode> item_;
+};
+
+class SetItemsNode: public AstNode {
+ public:
+  SetItemsNode(std::vector<std::unique_ptr<AstNode>>&& items)
+    : AstNode(Type::SET_ITEMS)
+    , items_{std::move(items)} {}
+
+  std::vector<std::unique_ptr<AstNode>>& GetItems() {
+    return items_;
+  }
+
+ private:
+  std::vector<std::unique_ptr<AstNode>> items_;
+};
+
+class PositiveSetNode: public AstNode {
+ public:
+  PositiveSetNode(std::unique_ptr<AstNode>&& set)
+    : AstNode(Type::POS_SET)
+    , set_{std::move(set)} {}
+
+  AstNode* GetSet() {
+    return set_.get();
+  }
+
+ private:
+  std::unique_ptr<AstNode> set_;
+};
+
+class NegativeSetNode: public AstNode {
+ public:
+  NegativeSetNode(std::unique_ptr<AstNode>&& set)
+    : AstNode(Type::NEG_SET)
+    , set_{std::move(set)} {}
+
+  AstNode* GetSet() {
+    return set_.get();
+  }
+
+ private:
+  std::unique_ptr<AstNode> set_;
+};
+
+class StarNode: public AstNode {
+ public:
+  StarNode()
+    : AstNode(Type::STAR) {}
+};
+
+class AnyNode: public AstNode {
+ public:
+  AnyNode()
+    : AstNode(Type::ANY) {}
+};
+
+class GroupNode: public AstNode {
+ public:
+  enum class GroupType {
+    BASIC,
+    ANY,
+    STAR,
+    PLUS,
+    NEG,
+    AT
+  };
+
+  GroupNode(std::unique_ptr<AstNode>&& glob)
+    : AstNode(Type::GROUP)
+    , glob_{std::move(glob)} {}
+
+  AstNode* GetGlob() {
+    return glob_.get();
+  }
+
+ private:
+  std::unique_ptr<AstNode> glob_;
+
+};
+
 class Glob {
  public:
   Glob() = default;
