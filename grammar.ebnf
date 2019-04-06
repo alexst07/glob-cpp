@@ -1,5 +1,6 @@
-<glob>              ::= <union> | <concat-glob>
-<union>             ::= <glob> "|" <concat-glob>
+<glob>              ::= <concat-glob> <EOS>;
+<glob-group>        ::= <union> | <union> <glob-group>;
+<union>             ::= <concat-glob> "|" <union> | <concat-glob>;
 <concat-glob>       ::= <basic-glob> | <basic-glob> <concat-glob>;
 <basic-glob>        ::= <group>
                       | <any>
@@ -13,12 +14,13 @@
                       | <plus-group>
                       | <neg-group>
                       | <at-group>;
-<basic-group>       ::= "(" <glob> ")"
-<any-group>         ::= "?" <basic-group>;
-<star-group>        ::= "*" <basic-group>;
-<plus-group>        ::= "+" <basic-group>;
-<neg-group>         ::= "!" <basic-group>;
-<at-group>          ::= "@" <basic-group>;
+
+<basic-group>       ::= "(" <glob-group> ")"
+<any-group>         ::= "?(" <glob-group> ")"
+<star-group>        ::= "*(" <glob-group> ")"
+<plus-group>        ::= "+(" <glob-group> ")"
+<neg-group>         ::= "!(" <glob-group> ")"
+<at-group>          ::= "@(" <glob-group> ")"
 <any>               ::= "?";
 <star>              ::= "*";
 <set>               ::= <positive-set> | <negative-set>;

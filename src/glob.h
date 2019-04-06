@@ -226,6 +226,22 @@ class Token {
   char Value() const {
     return value_;
   }
+
+  bool operator==(TokenKind kind) {
+    return kind_ == kind;
+  }
+
+  bool operator==(TokenKind kind) const {
+    return kind_ == kind;
+  }
+
+  bool operator!=(TokenKind kind) {
+    return kind_ != kind;
+  }
+
+  bool operator!=(TokenKind kind) const {
+    return kind_ != kind;
+  }
  private:
   friend std::ostream& operator<<(std::ostream& stream, const Token& token);
   TokenKind kind_;
@@ -248,20 +264,35 @@ class Lexer {
     while(true) {
       switch (c_) {
         case '?': {
-          tokens.push_back(Select(TokenKind::QUESTION));
           Advance();
+          if (c_ == '(') {
+            tokens.push_back(Select(TokenKind::QUESTLPAREN));
+            Advance();
+          } else {
+            tokens.push_back(Select(TokenKind::QUESTION));
+          }
           break;
         }
 
         case '*': {
-          tokens.push_back(Select(TokenKind::STAR));
           Advance();
+          if (c_ == '(') {
+            tokens.push_back(Select(TokenKind::STARLPAREN));
+            Advance();
+          } else {
+            tokens.push_back(Select(TokenKind::STAR));
+          }
           break;
         }
 
         case '+': {
-          tokens.push_back(Select(TokenKind::PLUS));
           Advance();
+          if (c_ == '(') {
+            tokens.push_back(Select(TokenKind::PLUSLPAREN));
+            Advance();
+          } else {
+            tokens.push_back(Select(TokenKind::CHAR, '+'));
+          }
           break;
         }
 
@@ -271,9 +302,31 @@ class Lexer {
           break;
         }
 
-        case '@': {
-          tokens.push_back(Select(TokenKind::AT));
+        case '|': {
+          tokens.push_back(Select(TokenKind::UNION));
           Advance();
+          break;
+        }
+
+        case '@': {
+          Advance();
+          if (c_ == '(') {
+            tokens.push_back(Select(TokenKind::ATLPAREN));
+            Advance();
+          } else {
+            tokens.push_back(Select(TokenKind::CHAR, '@'));
+          }
+          break;
+        }
+
+        case '!': {
+          Advance();
+          if (c_ == '(') {
+            tokens.push_back(Select(TokenKind::NEGLPAREN));
+            Advance();
+          } else {
+            tokens.push_back(Select(TokenKind::CHAR, '!'));
+          }
           break;
         }
 
@@ -329,6 +382,7 @@ class Lexer {
       }
     }
   }
+
  private:
   inline Token Select(TokenKind k) {
     return Token(k);
@@ -360,7 +414,7 @@ class Lexer {
              c != '!' &&
              c != '@' &&
              c != '\\';
-    return b;
+    return !b;
   }
 
   std::string str_;
@@ -382,7 +436,6 @@ class AstNode {
     STAR,
     ANY,
     GROUP,
-    BASIC_GLOB,
     CONCAT_GLOB,
     UNION,
     GLOB
@@ -413,22 +466,22 @@ class CharNode: public AstNode {
 
 class RangeNode: public AstNode {
  public:
-  RangeNode(char start, char end)
+  RangeNode(std::unique_ptr<AstNode>&& start, std::unique_ptr<AstNode>&& end)
     : AstNode(Type::RANGE)
-    , start_{start_}
-    , end_{end} {}
+    , start_{std::move(start_)}
+    , end_{std::move(end)} {}
 
-  char GetStart() const {
-    return start_;
+  AstNode* GetStart() const {
+    return start_.get();
   }
 
-  char GetEnd() const {
-    return end_;
+  AstNode* GetEnd() const {
+    return end_.get();
   }
 
  private:
-  char start_;
-  char end_;
+  std::unique_ptr<AstNode>&& start_;
+  std::unique_ptr<AstNode>&& end_;
 };
 
 class SetItemNode: public AstNode {
@@ -510,9 +563,10 @@ class GroupNode: public AstNode {
     AT
   };
 
-  GroupNode(std::unique_ptr<AstNode>&& glob)
+  GroupNode(GroupType group_type, std::unique_ptr<AstNode>&& glob)
     : AstNode(Type::GROUP)
-    , glob_{std::move(glob)} {}
+    , glob_{std::move(glob)}
+    , group_type_{group_type} {}
 
   AstNode* GetGlob() {
     return glob_.get();
@@ -520,7 +574,288 @@ class GroupNode: public AstNode {
 
  private:
   std::unique_ptr<AstNode> glob_;
+  GroupType group_type_;
+};
 
+class ConcatNode: public AstNode {
+ public:
+  ConcatNode(std::vector<std::unique_ptr<AstNode>>&& basic_glob)
+    : AstNode(Type::CONCAT_GLOB)
+    , basic_glob_{std::move(basic_glob)} {}
+
+  std::vector<std::unique_ptr<AstNode>>& GetBasicGlobs() {
+    return basic_glob_;
+  }
+
+ private:
+  std::vector<std::unique_ptr<AstNode>> basic_glob_;
+};
+
+class UnionNode: public AstNode {
+ public:
+  UnionNode(std::unique_ptr<AstNode>&& left, std::unique_ptr<AstNode>&& right)
+    : AstNode(Type::UNION)
+    , left_{std::move(left)}
+    , right_{std::move(right)} {}
+
+  AstNode* GetLeft() {
+    return left_.get();
+  }
+
+  AstNode* GetRight() {
+    return right_.get();
+  }
+
+ private:
+  std::unique_ptr<AstNode> left_;
+  std::unique_ptr<AstNode> right_;
+};
+
+class GlobNode: public AstNode {
+ public:
+  GlobNode(std::unique_ptr<AstNode>&& glob)
+    : AstNode(Type::GLOB)
+    , glob_{std::move(glob)} {}
+
+  AstNode* GetBasicGlobs() {
+    return glob_.get();
+  }
+
+ private:
+  std::unique_ptr<AstNode> glob_;
+};
+
+using AstNodePtr = std::unique_ptr<AstNode>;
+
+class Parser {
+ public:
+  Parser() = delete;
+
+  AstNodePtr GenAst() {
+    return ParserGlob();
+  }
+
+ private:
+  AstNodePtr ParserChar() {
+    Token& tk = NextToken();
+    if (tk != TokenKind::CHAR) {
+      throw Error("char expected");
+    }
+
+    char c = tk.Value();
+    return AstNodePtr(new CharNode(c));
+  }
+
+  AstNodePtr ParserRange() {
+    AstNodePtr char_start = ParserChar();
+
+    Token& tk = NextToken();
+    if (tk != TokenKind::SUB) {
+      throw Error("range expected");
+    }
+
+    AstNodePtr char_end = ParserChar();
+    return AstNodePtr(
+        new RangeNode(std::move(char_start), std::move(char_end)));
+  }
+
+  AstNodePtr ParserSetItem() {
+    if (PeekAhead() == TokenKind::SUB) {
+      return ParserRange();
+    }
+
+    return ParserChar();
+  }
+
+  AstNodePtr ParserSetItems() {
+    std::vector<AstNodePtr> items;
+
+    do {
+      items.push_back(ParserSetItem());
+    } while (GetToken() != TokenKind::RBRACKET);
+
+    Advance();
+
+    return AstNodePtr(new SetItemsNode(std::move(items)));
+  }
+
+  AstNodePtr ParserSet() {
+    Token& tk = NextToken();
+
+    if (tk == TokenKind::LBRACKET) {
+      return AstNodePtr(new PositiveSetNode(ParserSetItems()));
+    } else if (tk == TokenKind::NEGLBRACKET) {
+      return AstNodePtr(new NegativeSetNode(ParserSetItems()));
+    } else {
+      throw Error("set expected");
+    }
+  }
+
+  AstNodePtr ParserBasicGlob() {
+    Token& tk = GetToken();
+
+    switch (tk.Kind()) {
+      case TokenKind::QUESTION:
+        return AstNodePtr(new AnyNode());
+        break;
+
+      case TokenKind::STAR:
+        return AstNodePtr(new StarNode());
+        break;
+
+      case TokenKind::CHAR:
+        return ParserChar();
+        break;
+
+      case TokenKind::LBRACKET:
+      case TokenKind::NEGLBRACKET:
+        return ParserSet();
+        break;
+
+      case TokenKind::LPAREN:
+      case TokenKind::QUESTLPAREN:
+      case TokenKind::STARLPAREN:
+      case TokenKind::PLUSLPAREN:
+      case TokenKind::NEGLPAREN:
+      case TokenKind::ATLPAREN:
+        return ParserGroup();
+        break;
+
+      default:
+        throw Error("basic glob expected");
+        break;
+    }
+  }
+
+  AstNodePtr ParserGroup() {
+    GroupNode::GroupType type;
+    Token& tk = NextToken();
+
+    switch (tk.Kind()) {
+      case TokenKind::LPAREN:
+        type = GroupNode::GroupType::BASIC;
+        break;
+
+      case TokenKind::QUESTLPAREN:
+        type = GroupNode::GroupType::ANY;
+        break;
+
+      case TokenKind::STARLPAREN:
+        type = GroupNode::GroupType::STAR;
+        break;
+
+      case TokenKind::PLUSLPAREN:
+        type = GroupNode::GroupType::PLUS;
+        break;
+
+      case TokenKind::NEGLPAREN:
+        type = GroupNode::GroupType::NEG;
+        break;
+
+      case TokenKind::ATLPAREN:
+        type = GroupNode::GroupType::AT;
+        break;
+
+      default:
+        throw Error("Not valid group");
+        break;
+    }
+
+    AstNodePtr group_glob = ParserUnion();
+    tk = NextToken();
+    if (tk != TokenKind::RPAREN) {
+      throw Error("Expected ')' at and of group");
+    }
+
+    return AstNodePtr(new GroupNode(type, std::move(group_glob)));
+  }
+
+  AstNodePtr ParserConcat() {
+    auto check_end = [&]() -> bool {
+      Token& tk = GetToken();
+
+      switch (tk.Kind()) {
+        case TokenKind::EOS:
+        case TokenKind::RPAREN:
+        case TokenKind::UNION:
+          return true;
+          break;
+
+        default:
+          return false;
+          break;
+      }
+    };
+
+    std::vector<AstNodePtr> parts;
+
+    do {
+      parts.push_back(ParserBasicGlob());
+    } while (!check_end());
+
+    return AstNodePtr(new ConcatNode(std::move(parts)));
+  }
+
+  AstNodePtr ParserUnion() {
+    AstNodePtr rexp;
+    AstNodePtr lexp = ParserConcat();
+
+    while (GetToken() == TokenKind::UNION) {
+      Advance();
+      rexp = ParserConcat();
+      lexp = AstNodePtr(new UnionNode(std::move(lexp), std::move(rexp)));
+    }
+
+    return lexp;
+  }
+
+  AstNodePtr ParserGlob() {
+    AstNodePtr glob = ParserConcat();
+
+    if (GetToken() != TokenKind::EOS) {
+      throw Error("Expected the end of glob");
+    }
+
+    return AstNodePtr(new GlobNode(std::move(glob)));
+  }
+
+  inline const Token& GetToken() const {
+    return tok_vec_.at(pos_);
+  }
+
+  inline Token& GetToken() {
+    return tok_vec_.at(pos_);
+  }
+
+  inline const Token& PeekAhead() const {
+    if ((pos_ + 1) >= (tok_vec_.size() - 1))
+      return tok_vec_.back();
+
+    return tok_vec_.at(pos_ + 1);
+  }
+
+  inline Token& NextToken() {
+    if ((pos_ + 1) >= (tok_vec_.size() - 1))
+      return tok_vec_.back();
+
+    Token& tk = tok_vec_.at(pos_++);
+    return tk;
+  }
+
+  inline bool Advance() {
+    if (pos_ == tok_vec_.size() - 1)
+      return false;
+
+    ++pos_;
+    return true;
+  }
+
+  inline size_t Size() const noexcept {
+    return tok_vec_.size();
+  }
+
+  std::vector<Token> tok_vec_;
+  size_t pos_;
 };
 
 class Glob {
