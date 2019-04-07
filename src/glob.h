@@ -1,3 +1,6 @@
+#ifndef GLOB_CPP_H
+#define GLOB_CPP_H
+
 #include <string>
 #include <tuple>
 #include <vector>
@@ -402,19 +405,19 @@ class Lexer {
   }
 
   inline bool IsSpecialChar(char c) {
-    bool b = c != '?' &&
-             c != '*' &&
-             c != '+' &&
-             c != '^' &&
-             c != '(' &&
-             c != ')' &&
-             c != '[' &&
-             c != ']' &&
-             c != '|' &&
-             c != '!' &&
-             c != '@' &&
-             c != '\\';
-    return !b;
+    bool b = c == '?' ||
+             c == '*' ||
+             c == '+' ||
+             c == '^' ||
+             c == '(' ||
+             c == ')' ||
+             c == '[' ||
+             c == ']' ||
+             c == '|' ||
+             c == '!' ||
+             c == '@' ||
+             c == '\\';
+    return b;
   }
 
   std::string str_;
@@ -422,6 +425,27 @@ class Lexer {
   char c_;
 };
 
+
+#define AST_NODE_LIST(V)  \
+  V(CharNode)             \
+  V(RangeNode)            \
+  V(SetItemNode)          \
+  V(SetItemsNode)         \
+  V(PositiveSetNode)      \
+  V(NegativeSetNode)      \
+  V(StarNode)             \
+  V(AnyNode)              \
+  V(GroupNode)            \
+  V(ConcatNode)           \
+  V(UnionNode)            \
+  V(GlobNode)
+
+class AstVisitor;
+
+// declare all classes used for nodes
+#define DECLARE_TYPE_CLASS(type) class type;
+  AST_NODE_LIST(DECLARE_TYPE_CLASS)
+#undef DECLARE_TYPE_CLASS
 
 class AstNode {
  public:
@@ -445,6 +469,8 @@ class AstNode {
     return type_;
   }
 
+  virtual void Accept(AstVisitor* visitor) = 0;
+
  protected:
   AstNode(Type type): type_{type} {}
 
@@ -452,9 +478,24 @@ class AstNode {
   Type type_;
 };
 
+class AstVisitor {
+ public:
+
+// define all visitor methods for the nodes
+#define DECLARE_VIRTUAL_FUNC(type) \
+  virtual void Visit##type(type* /*node*/) {}
+  AST_NODE_LIST(DECLARE_VIRTUAL_FUNC)
+#undef DECLARE_VIRTUAL_FUNC
+};
+
+
 class CharNode: public AstNode {
  public:
   CharNode(char c): AstNode(Type::CHAR), c_{c} {}
+
+  virtual void Accept(AstVisitor* visitor) {
+    visitor->VisitCharNode(this);
+  }
 
   char GetValue() const {
     return c_;
@@ -468,8 +509,12 @@ class RangeNode: public AstNode {
  public:
   RangeNode(std::unique_ptr<AstNode>&& start, std::unique_ptr<AstNode>&& end)
     : AstNode(Type::RANGE)
-    , start_{std::move(start_)}
+    , start_{std::move(start)}
     , end_{std::move(end)} {}
+
+  virtual void Accept(AstVisitor* visitor) {
+    visitor->VisitRangeNode(this);
+  }
 
   AstNode* GetStart() const {
     return start_.get();
@@ -480,8 +525,8 @@ class RangeNode: public AstNode {
   }
 
  private:
-  std::unique_ptr<AstNode>&& start_;
-  std::unique_ptr<AstNode>&& end_;
+  std::unique_ptr<AstNode> start_;
+  std::unique_ptr<AstNode> end_;
 };
 
 class SetItemNode: public AstNode {
@@ -489,6 +534,10 @@ class SetItemNode: public AstNode {
   SetItemNode(std::unique_ptr<AstNode>&& item)
     : AstNode(Type::SET_ITEM)
     , item_{std::move(item)} {}
+
+  virtual void Accept(AstVisitor* visitor) {
+    visitor->VisitSetItemNode(this);
+  }
 
   AstNode* GetItem() {
     return item_.get();
@@ -504,6 +553,10 @@ class SetItemsNode: public AstNode {
     : AstNode(Type::SET_ITEMS)
     , items_{std::move(items)} {}
 
+  virtual void Accept(AstVisitor* visitor) {
+    visitor->VisitSetItemsNode(this);
+  }
+
   std::vector<std::unique_ptr<AstNode>>& GetItems() {
     return items_;
   }
@@ -517,6 +570,10 @@ class PositiveSetNode: public AstNode {
   PositiveSetNode(std::unique_ptr<AstNode>&& set)
     : AstNode(Type::POS_SET)
     , set_{std::move(set)} {}
+
+  virtual void Accept(AstVisitor* visitor) {
+    visitor->VisitPositiveSetNode(this);
+  }
 
   AstNode* GetSet() {
     return set_.get();
@@ -532,6 +589,10 @@ class NegativeSetNode: public AstNode {
     : AstNode(Type::NEG_SET)
     , set_{std::move(set)} {}
 
+  virtual void Accept(AstVisitor* visitor) {
+    visitor->VisitNegativeSetNode(this);
+  }
+
   AstNode* GetSet() {
     return set_.get();
   }
@@ -544,12 +605,20 @@ class StarNode: public AstNode {
  public:
   StarNode()
     : AstNode(Type::STAR) {}
+
+  virtual void Accept(AstVisitor* visitor) {
+    visitor->VisitStarNode(this);
+  }
 };
 
 class AnyNode: public AstNode {
  public:
   AnyNode()
     : AstNode(Type::ANY) {}
+
+  virtual void Accept(AstVisitor* visitor) {
+    visitor->VisitAnyNode(this);
+  }
 };
 
 class GroupNode: public AstNode {
@@ -568,6 +637,10 @@ class GroupNode: public AstNode {
     , glob_{std::move(glob)}
     , group_type_{group_type} {}
 
+  virtual void Accept(AstVisitor* visitor) {
+    visitor->VisitGroupNode(this);
+  }
+
   AstNode* GetGlob() {
     return glob_.get();
   }
@@ -583,6 +656,10 @@ class ConcatNode: public AstNode {
     : AstNode(Type::CONCAT_GLOB)
     , basic_glob_{std::move(basic_glob)} {}
 
+  virtual void Accept(AstVisitor* visitor) {
+    visitor->VisitConcatNode(this);
+  }
+
   std::vector<std::unique_ptr<AstNode>>& GetBasicGlobs() {
     return basic_glob_;
   }
@@ -597,6 +674,10 @@ class UnionNode: public AstNode {
     : AstNode(Type::UNION)
     , left_{std::move(left)}
     , right_{std::move(right)} {}
+
+  virtual void Accept(AstVisitor* visitor) {
+    visitor->VisitUnionNode(this);
+  }
 
   AstNode* GetLeft() {
     return left_.get();
@@ -617,6 +698,10 @@ class GlobNode: public AstNode {
     : AstNode(Type::GLOB)
     , glob_{std::move(glob)} {}
 
+  virtual void Accept(AstVisitor* visitor) {
+    visitor->VisitGlobNode(this);
+  }
+
   AstNode* GetBasicGlobs() {
     return glob_.get();
   }
@@ -630,6 +715,8 @@ using AstNodePtr = std::unique_ptr<AstNode>;
 class Parser {
  public:
   Parser() = delete;
+
+  Parser(std::vector<Token>&& tok_vec): tok_vec_{std::move(tok_vec)}, pos_{0} {}
 
   AstNodePtr GenAst() {
     return ParserGlob();
@@ -696,10 +783,12 @@ class Parser {
 
     switch (tk.Kind()) {
       case TokenKind::QUESTION:
+        Advance();
         return AstNodePtr(new AnyNode());
         break;
 
       case TokenKind::STAR:
+        Advance();
         return AstNodePtr(new StarNode());
         break;
 
@@ -789,9 +878,9 @@ class Parser {
 
     std::vector<AstNodePtr> parts;
 
-    do {
+    while (!check_end()) {
       parts.push_back(ParserBasicGlob());
-    } while (!check_end());
+    }
 
     return AstNodePtr(new ConcatNode(std::move(parts)));
   }
@@ -828,17 +917,18 @@ class Parser {
   }
 
   inline const Token& PeekAhead() const {
-    if ((pos_ + 1) >= (tok_vec_.size() - 1))
+    if (pos_ >= (tok_vec_.size() - 1))
       return tok_vec_.back();
 
     return tok_vec_.at(pos_ + 1);
   }
 
   inline Token& NextToken() {
-    if ((pos_ + 1) >= (tok_vec_.size() - 1))
+    if (pos_ >= (tok_vec_.size() - 1))
       return tok_vec_.back();
 
-    Token& tk = tok_vec_.at(pos_++);
+    Token& tk = tok_vec_.at(pos_);
+    pos_++;
     return tk;
   }
 
@@ -909,3 +999,5 @@ class Glob {
  private:
   Automata automato_;
 };
+
+#endif  // GLOB_CPP_H

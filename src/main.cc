@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include "glob.h"
+#include "traversal.h"
 
 bool GlobMatch(const std::string& pattern, const std::string& str) {
   size_t px = 0;
@@ -91,10 +92,17 @@ int main(int argc, char **argv) {
   // std::cout << "'tes*a*c*', 'teste_afdsr_crdsd' -> " << TestGlob("tes*a*c*", "teste_afdsr_crdsd") << std::endl;
   // std::cout << "'te**te', 'tete' -> " << TestGlob("te**te", "tete") << std::endl;
 
-  PrintTokens("te*e");
-  PrintTokens("te+[a-z]?sd");
-  PrintTokens("te+[^a-z]");
-  PrintTokens("te*(as|sd[jpg])");
+  // PrintTokens("te*e");
+  // PrintTokens("te+[a-z]?sd");
+  // PrintTokens("te+[^a-z]");
+  // PrintTokens("te*(as|sd[jpg])");
+
+  //PrintAst("t*e?*[ABa-z]ar[^x]e*x");
+  // PrintAst("as(se|t(se)s|e[a-z]s)");
+  // PrintAst("!(+(ab|def)*+(.jpg|.gif))");
+  // PrintAst("+([a-z]).(jpg|jpeg)");
+  // PrintAst("*.(\\*jpg|[Pp][Nn][Gg\\?])");
+  PrintAst("[a-zA-Z0-9%]?");
   return 0;
 }
 
