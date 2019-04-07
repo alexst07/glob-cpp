@@ -110,6 +110,7 @@ class PrintTraversal: public AstVisitor {
   }
 
   void VisitConcatNode(ConcatNode* node) override {
+    NewLine( );
     after_simple_ = false;
     auto& vec = node->GetBasicGlobs();
     Level();
@@ -129,39 +130,26 @@ class PrintTraversal: public AstVisitor {
   }
 
   void VisitUnionNode(UnionNode* node) override {
-    NewLine(false);
     after_simple_ = false;
+    auto& vec = node->GetItems();
     Level();
     std::cout << "<union>";
     NewLine();
 
-    ++level_;
-    Level();
-    std::cout << "<left>";
-    NewLine();
-    ++level_;
-    node->GetLeft()->Accept(this);
-    --level_;
-    NewLine(false);
-    Level();
-    std::cout << "</left>";
-    NewLine();
-    --level_;
-
-    ++level_;
-    Level();
-    std::cout << "<right>";
-    NewLine();
-    ++level_;
-    node->GetRight()->Accept(this);
-    --level_;
-    NewLine(false);
-    Level();
-    std::cout << "</right>";
+    for (auto& item_node : vec) {
+      ++level_;
+      Level();
+      std::cout << "<item>";
+      item_node.get()->Accept(this);
+      Level();
+      std::cout << "</item>";
+      --level_;
+    }
 
     NewLine(false);
     Level();
     std::cout << "</union>";
+    NewLine();
     after_simple_ = false;
   }
 

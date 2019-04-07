@@ -1,6 +1,6 @@
 <glob>              ::= <concat-glob> <EOS>;
 <glob-group>        ::= <union> | <union> <glob-group>;
-<union>             ::= <concat-glob> "|" <union> | <concat-glob>;
+<union>             ::= <concat-glob> | <concat-glob> "|" <union>
 <concat-glob>       ::= <basic-glob> | <basic-glob> <concat-glob>;
 <basic-glob>        ::= <group>
                       | <any>

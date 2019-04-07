@@ -55,7 +55,11 @@ bool GlobMatch(const std::string& pattern, const std::string& str) {
 bool TestGlob(const std::string& pattern, const std::string& str) {
   Glob glob;
   glob.Parser(pattern);
-  return glob.GetAutomato().Exec(str);
+  bool r;
+  size_t pos;
+  std::tie(r, pos) = glob.GetAutomata().Exec(str);
+  std::cout << "pos: " << pos << "\n";
+  return r;
 }
 
 void PrintTokens(const std::string& str) {
@@ -80,7 +84,7 @@ int main(int argc, char **argv) {
   // std::cout << "'tes*a*c*', 'teste_afdsr_crdsd' -> " << GlobMatch("tes*a*c*", "teste_afdsr_crdsd") << std::endl;
   // std::cout << "'te**te', 'tete' -> " << GlobMatch("te**te", "tete") << std::endl;
   // std::cout << "-----------------------------------\n";
-  // std::cout << "'te*', 'teste' -> " << TestGlob("te*", "teste") << std::endl;
+  // std::cout << "'te', 'teste' -> " << TestGlob("te", "teste") << std::endl;
   // std::cout << "'tea*', 'teste' -> " << TestGlob("tea*", "teste") << std::endl;
   // std::cout << "'test?', 'teste' -> " << TestGlob("test?", "teste") << std::endl;
   // std::cout << "'te?te', 'texte' -> " << TestGlob("te?te", "texte") << std::endl;
@@ -97,12 +101,15 @@ int main(int argc, char **argv) {
   // PrintTokens("te+[^a-z]");
   // PrintTokens("te*(as|sd[jpg])");
 
-  //PrintAst("t*e?*[ABa-z]ar[^x]e*x");
+  // PrintAst("t*e?*[ABa-z]ar[^x]e*x");
   // PrintAst("as(se|t(se)s|e[a-z]s)");
   // PrintAst("!(+(ab|def)*+(.jpg|.gif))");
   // PrintAst("+([a-z]).(jpg|jpeg)");
   // PrintAst("*.(\\*jpg|[Pp][Nn][Gg\\?])");
-  PrintAst("[a-zA-Z0-9%]?");
+  // PrintAst("[a-zA-Z0-9%]?");
+  // PrintAst("+(as|ts|sd)");
+  // PrintAst("+(a)");
+  PrintAst("*-[0-9].jtl");
   return 0;
 }
 
