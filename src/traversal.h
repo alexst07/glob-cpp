@@ -31,20 +31,6 @@ class PrintTraversal: public AstVisitor {
     after_simple_ = false;
   }
 
-  void VisitSetItemNode(SetItemNode* node) override {
-    after_simple_ = false;
-    Level();
-    std::cout << "<set-item>";
-    NewLine();
-    ++level_;
-    node->GetItem()->Accept(this);
-    --level_;
-    Level();
-    std::cout << "</set-item>";
-    NewLine();
-    after_simple_ = false;
-  }
-
   void VisitSetItemsNode(SetItemsNode* node) override {
     after_simple_ = false;
     auto& vec = node->GetItems();
@@ -160,7 +146,7 @@ class PrintTraversal: public AstVisitor {
     std::cout << "<glob>";
     NewLine();
 
-    node->GetBasicGlobs()->Accept(this);
+    node->GetConcat()->Accept(this);
 
     Level();
     std::cout << "</glob>";

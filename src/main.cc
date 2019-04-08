@@ -53,13 +53,18 @@ bool GlobMatch(const std::string& pattern, const std::string& str) {
 }
 
 bool TestGlob(const std::string& pattern, const std::string& str) {
-  Glob glob;
+  SimpleGlob glob;
   glob.Parser(pattern);
   bool r;
   size_t pos;
   std::tie(r, pos) = glob.GetAutomata().Exec(str);
   std::cout << "pos: " << pos << "\n";
   return r;
+}
+
+bool TestGlob2(const std::string& pattern, const std::string& str) {
+  Glob glob(pattern);
+  return glob.Exec(str);
 }
 
 void PrintTokens(const std::string& str) {
@@ -107,9 +112,10 @@ int main(int argc, char **argv) {
   // PrintAst("+([a-z]).(jpg|jpeg)");
   // PrintAst("*.(\\*jpg|[Pp][Nn][Gg\\?])");
   // PrintAst("[a-zA-Z0-9%]?");
-  // PrintAst("+(as|ts|sd)");
+  // PrintAst("+((a)|ts|s)");
   // PrintAst("+(a)");
-  PrintAst("*-[0-9].jtl");
+  // PrintAst("*-[0-9].jtl");
+  std::cout << "'te*t(x)', 'teste' -> " << TestGlob2("t(xz)", "tee") << std::endl;
   return 0;
 }
 

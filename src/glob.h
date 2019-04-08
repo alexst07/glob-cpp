@@ -137,10 +137,17 @@ class Automata {
     return *this;
   }
 
+  size_t GetNumStates() const {
+    return states_.size();
+  }
+
   std::tuple<bool, size_t> Exec(const std::string str,
       bool comp_end = true) const {
     size_t state_pos = 0;
     size_t str_pos = 0;
+
+    std::cout << "fail state: " << fail_state_ << "\n";
+    std::cout << "match_state_: " << match_state_<< "\n";
 
     // run the state vector until state reaches fail or match state, or
     // until the string is all consumed
@@ -153,13 +160,16 @@ class Automata {
     // the string
     if (comp_end) {
       if ((state_pos == match_state_) && (str_pos == str.length())) {
+        std::cout << "return Automata 1: " << (state_pos == match_state_) << "\n";
         return std::tuple<bool, size_t>(state_pos == match_state_, str_pos);
       }
 
+      std::cout << "return Automata 2: " << false << "\n";
       return std::tuple<bool, size_t>(false, str_pos);
     } else {
       // if comp_end is false, compare only if the states reached the
       // match state
+      std::cout << "state_pos: " << state_pos << "\n";
       return std::tuple<bool, size_t>(state_pos == match_state_, str_pos);
     }
   }
@@ -192,6 +202,7 @@ class StateChar : public State {
   }
 
   std::tuple<size_t, size_t> Next(const std::string& str, size_t pos) override {
+    std::cout << "char: str[pos]: " << str[pos] << "; c_: " << c_ << "\n";
     if (c_ == str[pos]) {
       return std::tuple<size_t, size_t>(GetNextStates()[0], pos + 1);
     }
@@ -283,18 +294,29 @@ class SetItemRange: public SetItem {
 
 class StateSet : public State {
  public:
-  StateSet(Automata& states, std::vector<std::unique_ptr<SetItem>> items)
+  StateSet(Automata& states, std::vector<std::unique_ptr<SetItem>> items,
+      bool neg = false)
     : State(StateType::SET, states)
-    , items_{std::move(items)} {}
+    , items_{std::move(items)}
+    , neg_{neg} {}
 
-  bool Check(const std::string& str, size_t pos) const override {
-    bool r = false;
+  bool SetCheck(const std::string& str, size_t pos) const {
     for (auto& item : items_) {
       // if any item match, then the set match with char
-      r = r || item.get()->Check(str[pos]);
+      if (item.get()->Check(str[pos])) {
+        return true;
+      }
     }
 
-    return r;
+    return false;
+  }
+
+  bool Check(const std::string& str, size_t pos) const override {
+    if (neg_) {
+      return !SetCheck(str, pos);
+    }
+
+    return SetCheck(str, pos);
   }
 
   std::tuple<size_t, size_t> Next(const std::string& str, size_t pos) override {
@@ -306,6 +328,7 @@ class StateSet : public State {
   }
  private:
   std::vector<std::unique_ptr<SetItem>> items_;
+  bool neg_;
 };
 
 class StateGroup: public State {
@@ -330,24 +353,55 @@ class StateGroup: public State {
     bool r;
     size_t str_pos;
 
+    // each automata is a part of a union of the group, in basic check,
+    // we want find only if any automata is true
     for (auto& automata : automatas_) {
+      std::cout << "str_part: " << str_part << "; pos: " << pos << "\n";
       std::tie(r, str_pos) = automata.Exec(str_part, false);
+      std::cout << "r: " << r << "; str_pos: " << str_pos << "\n";
       if (r) {
-        return std::tuple<bool, size_t>(r, str_pos);
+        return std::tuple<bool, size_t>(r, pos + str_pos);
       }
     }
 
-    return std::tuple<bool, size_t>(false, str_pos);
+    return std::tuple<bool, size_t>(false, pos + str_pos);
   }
 
   bool Check(const std::string& str, size_t pos) const override {
-    // as it match any char, it is always trye
-    return true;
+    switch (type_) {
+      case Type::BASIC:
+      case Type::AT: {
+        bool r;
+        std::tie(r, std::ignore) = BasicCheck(str, pos);
+        return r;
+        break;
+      }
+
+      default:
+        return false;
+        break;
+    }
   }
 
   std::tuple<size_t, size_t> Next(const std::string& str, size_t pos) override {
-    // state any always match with any char
-    return std::tuple<size_t, size_t>(GetNextStates()[0], pos + 1);
+    switch (type_) {
+      case Type::BASIC:
+      case Type::AT: {
+        bool r;
+        size_t new_pos;
+        std::tie(r, new_pos) = BasicCheck(str, pos);
+        if (r) {
+          return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos);
+        }
+
+        return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
+        break;
+      }
+
+      default:
+        return BasicCheck(str, pos);
+        break;
+    }
   }
 
  private:
@@ -582,7 +636,6 @@ class Lexer {
 #define AST_NODE_LIST(V)  \
   V(CharNode)             \
   V(RangeNode)            \
-  V(SetItemNode)          \
   V(SetItemsNode)         \
   V(PositiveSetNode)      \
   V(NegativeSetNode)      \
@@ -680,24 +733,6 @@ class RangeNode: public AstNode {
  private:
   std::unique_ptr<AstNode> start_;
   std::unique_ptr<AstNode> end_;
-};
-
-class SetItemNode: public AstNode {
- public:
-  SetItemNode(std::unique_ptr<AstNode>&& item)
-    : AstNode(Type::SET_ITEM)
-    , item_{std::move(item)} {}
-
-  virtual void Accept(AstVisitor* visitor) {
-    visitor->VisitSetItemNode(this);
-  }
-
-  AstNode* GetItem() {
-    return item_.get();
-  }
-
- private:
-  std::unique_ptr<AstNode> item_;
 };
 
 class SetItemsNode: public AstNode {
@@ -849,7 +884,7 @@ class GlobNode: public AstNode {
     visitor->VisitGlobNode(this);
   }
 
-  AstNode* GetBasicGlobs() {
+  AstNode* GetConcat() {
     return glob_.get();
   }
 
@@ -1099,9 +1134,187 @@ class Parser {
   size_t pos_;
 };
 
+class AstConsumer {
+ public:
+  AstConsumer() = default;
+
+  void GenAutomata(AstNode* root_node, Automata& automata) {
+    AstNode* concat_node = static_cast<GlobNode*>(root_node)->GetConcat();
+    ExecConcat(concat_node, automata);
+
+    size_t match_state = automata.NewState<StateMatch>();
+    automata.GetState(preview_state_).AddNextState(match_state);
+    automata.SetMatchState(match_state);
+
+    size_t fail_state = automata.NewState<StateFail>();
+    automata.SetFailState(fail_state);
+  }
+
+ private:
+  void ExecConcat(AstNode* node, Automata& automata) {
+    ConcatNode* concat_node = static_cast<ConcatNode*>(node);
+    std::vector<AstNodePtr>& basic_globs = concat_node->GetBasicGlobs();
+
+    for (auto& basic_glob : basic_globs) {
+      ExecBasicGlob(basic_glob.get(), automata);
+    }
+  }
+
+  void ExecBasicGlob(AstNode* node, Automata& automata) {
+    switch (node->GetType()) {
+      case AstNode::Type::CHAR:
+        ExecChar(node, automata);
+        break;
+
+      case AstNode::Type::ANY:
+        ExecAny(node, automata);
+        break;
+
+      case AstNode::Type::STAR:
+        ExecStar(node, automata);
+        break;
+
+      case AstNode::Type::POS_SET:
+        ExecPositiveSet(node, automata);
+        break;
+
+      case AstNode::Type::NEG_SET:
+        ExecNegativeSet(node, automata);
+        break;
+
+      case AstNode::Type::GROUP:
+        ExecGroup(node, automata);
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  void ExecChar(AstNode* node, Automata& automata) {
+    CharNode* char_node = static_cast<CharNode*>(node);
+    char c = char_node->GetValue();
+    NewState<StateChar>(automata, c);
+  }
+
+  void ExecAny(AstNode* node, Automata& automata) {
+    NewState<StateAny>(automata);
+  }
+
+  void ExecStar(AstNode* node, Automata& automata) {
+    NewState<StateStar>(automata);
+    automata.GetState(current_state_).AddNextState(current_state_);
+  }
+
+  void ExecPositiveSet(AstNode* node, Automata& automata) {
+    PositiveSetNode* pos_set_node = static_cast<PositiveSetNode*>(node);
+    auto items = ProcessSetItems(pos_set_node->GetSet());
+    NewState<StateSet>(automata, std::move(items));
+  }
+
+  void ExecNegativeSet(AstNode* node, Automata& automata) {
+    NegativeSetNode* pos_set_node = static_cast<NegativeSetNode*>(node);
+    auto items = ProcessSetItems(pos_set_node->GetSet());
+    NewState<StateSet>(automata, std::move(items), /*neg*/true);
+  }
+
+  std::vector<std::unique_ptr<SetItem>> ProcessSetItems(AstNode* node) {
+    SetItemsNode* set_node = static_cast<SetItemsNode*>(node);
+    std::vector<std::unique_ptr<SetItem>> vec;
+    auto& items = set_node->GetItems();
+    for (auto& item : items) {
+      vec.push_back(ProcessSetItem(item.get()));
+    }
+
+    return vec;
+  }
+
+  std::unique_ptr<SetItem> ProcessSetItem(AstNode* node) {
+    if (node->GetType() == AstNode::Type::CHAR) {
+      CharNode* char_node = static_cast<CharNode*>(node);
+      char c = char_node->GetValue();
+      return std::unique_ptr<SetItem>(new SetItemChar(c));
+    } else if (node->GetType() == AstNode::Type::RANGE) {
+      RangeNode* range_node = static_cast<RangeNode*>(node);
+      CharNode* start_node = static_cast<CharNode*>(range_node->GetStart());
+      CharNode* end_node = static_cast<CharNode*>(range_node->GetEnd());
+      char start_char = start_node->GetValue();
+      char end_char = end_node->GetValue();
+      return std::unique_ptr<SetItem>(new SetItemRange(start_char, end_char));
+    } else {
+      throw Error("Not valid set item");
+    }
+  }
+
+  void ExecGroup(AstNode* node, Automata& automata) {
+    GroupNode* group_node = static_cast<GroupNode*>(node);
+    AstNode* union_node = group_node->GetGlob();
+    std::vector<Automata> vec_automatas = ExecUnion(union_node);
+    NewState<StateGroup>(automata, StateGroup::Type::BASIC,
+        std::move(vec_automatas));
+  }
+
+  std::vector<Automata> ExecUnion(AstNode* node) {
+    UnionNode* union_node = static_cast<UnionNode*>(node);
+    auto& items = union_node->GetItems();
+    std::vector<Automata> vec_automatas;
+    for (auto& item : items) {
+      Automata automata;
+      AstConsumer ast_consumer;
+      ast_consumer.ExecConcat(item.get(), automata);
+
+      size_t match_state = automata.NewState<StateMatch>();
+      automata.GetState(ast_consumer.preview_state_).AddNextState(match_state);
+      automata.SetMatchState(match_state);
+
+      size_t fail_state = automata.NewState<StateFail>();
+      automata.SetFailState(fail_state);
+
+      vec_automatas.push_back(std::move(automata));
+    }
+
+    return vec_automatas;
+  }
+
+  template<class T, typename... Args>
+  void NewState(Automata& automata, Args&&... args) {
+    current_state_ = automata.NewState<T>(std::forward<Args>(args)...);
+    if (preview_state_ >= 0) {
+      automata.GetState(preview_state_).AddNextState(current_state_);
+    }
+    preview_state_ = current_state_;
+  }
+
+ private:
+  int preview_state_ = -1;
+  size_t current_state_ = 0;
+};
+
 class Glob {
  public:
-  Glob() = default;
+  Glob(const std::string& str) {
+    Lexer l(str);
+    std::vector<Token> tokens = l.Scanner();
+    Parser p(std::move(tokens));
+    AstNodePtr ast_ptr = p.GenAst();
+
+    AstConsumer ast_consumer;
+    ast_consumer.GenAutomata(ast_ptr.get(), automata_);
+  }
+
+  bool Exec(const std::string& str) {
+    bool r;
+    size_t pos;
+    std::tie(r, pos) = automata_.Exec(str);
+    return r;
+  }
+
+ private:
+  Automata automata_;
+};
+class SimpleGlob {
+ public:
+  SimpleGlob() = default;
   void Parser(const std::string& pattern) {
     size_t pos = 0;
     int preview_state = -1;
