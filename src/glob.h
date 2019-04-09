@@ -428,6 +428,11 @@ class StateGroup: public State {
       }
 
       case Type::ANY: {
+        bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
+        if (res) {
+          return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+        }
+
         bool r;
         size_t new_pos;
         std::tie(r, new_pos) = BasicCheck(str, pos);
@@ -439,19 +444,13 @@ class StateGroup: public State {
           return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
         }
 
-        bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
-        // if the next state is satisfied goes to next state
-        if (res) {
-          return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-        }
-
         return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
         break;
       }
 
       case Type::STAR: {
         bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
-        if (res && match_one_) {
+        if (res) {
           return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
         }
 
