@@ -165,7 +165,7 @@ class Automata {
         return std::tuple<bool, size_t>(state_pos == match_state_, str_pos);
       }
 
-      std::cout << "return Automata 2: " << state_pos << ":" << str.length() << "\n";
+      std::cout << "return Automata 2: " << str_pos << ":" << str.length() << "\n";
       return std::tuple<bool, size_t>(false, str_pos);
     } else {
       std::cout << "return Automata 3: " << state_pos << "\n";
@@ -428,16 +428,6 @@ class StateGroup: public State {
       }
 
       case Type::ANY: {
-        if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
-          return std::tuple<size_t, size_t>(GetNextStates()[1], str.length());
-        }
-
-        bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
-        // if the next state is satisfied goes to next state
-        if (res) {
-          return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-        }
-
         bool r;
         size_t new_pos;
         std::tie(r, new_pos) = BasicCheck(str, pos);
@@ -445,13 +435,8 @@ class StateGroup: public State {
           return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
         }
 
-        return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-        break;
-      }
-
-      case Type::STAR: {
         if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
-          return std::tuple<size_t, size_t>(GetNextStates()[1], str.length());
+          return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
         }
 
         bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
@@ -460,11 +445,30 @@ class StateGroup: public State {
           return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
         }
 
+        return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+        break;
+      }
+
+      case Type::STAR: {
+        bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
+        if (res && match_one_) {
+          return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+        }
+
         bool r;
         size_t new_pos;
         std::tie(r, new_pos) = BasicCheck(str, pos);
         if (r) {
-          return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos);
+          if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH
+              && new_pos == str.length()) {
+            return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
+          } else {
+            return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos);
+          }
+        }
+
+        if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
+          return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
         }
 
         return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
@@ -473,13 +477,9 @@ class StateGroup: public State {
 
       case Type::PLUS: {
         std::cout << "EXEC GROUP PLUS\n";
-        if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH
-            && match_one_) {
-          return std::tuple<size_t, size_t>(GetNextStates()[1], str.length());
-        }
-
+        // case where the next state matches and the group already matched
+        // one time -> goes to next state
         bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
-        // if the next state is satisfied goes to next state
         if (res && match_one_) {
           return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
         }
@@ -490,10 +490,28 @@ class StateGroup: public State {
         if (r) {
           match_one_ = true;
           std::cout << "Group return new_pos: " << new_pos << "\n";
-          return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos);
+
+          // if it matches and the string reached at the end, and the next
+          // state is the match state, goes to next state to avoid state mistake
+          if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH
+              && new_pos == str.length()) {
+            return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
+          } else {
+            return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos);
+          }
         }
 
         if (match_one_) {
+          if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
+            return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+          }
+
+          bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
+          // if the next state is satisfied goes to next state
+          if (res) {
+            return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+          }
+
           std::cout << "Group return pos: " << pos << "\n";
           return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
         } else {
@@ -508,9 +526,11 @@ class StateGroup: public State {
         size_t new_pos;
         std::tie(r, new_pos) = BasicCheck(str, pos);
         if (r) {
+          std::cout << "Group Neg fail" << new_pos << "\n";
           return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
         }
 
+        std::cout << "Group Neg: " << pos << "\n";
         return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
         break;
       }
@@ -1393,6 +1413,10 @@ class AstConsumer {
 
       case GroupNode::GroupType::AT:
         state_group_type = StateGroup::Type::AT;
+        break;
+
+      case GroupNode::GroupType::NEG:
+        state_group_type = StateGroup::Type::NEG;
         break;
     }
 
