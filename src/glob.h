@@ -103,8 +103,8 @@ class Automata {
   Automata(Automata&& automata)
     : states_{std::move(automata.states_)}
     , match_state_{automata.match_state_}
-    , fail_state_{automata.fail_state_}
-    , start_state_{automata.start_state_} {}
+    , fail_state_{std::exchange(automata.fail_state_, 0)}
+    , start_state_{std::exchange(automata.start_state_, 0)} {}
 
   Automata& operator=(Automata&& automata) {
     states_ = std::move(automata.states_);
@@ -123,7 +123,7 @@ class Automata {
     return *states_[pos];
   }
 
-  const size_t FailState() const {
+  size_t FailState() const {
     return fail_state_;
   }
 
@@ -146,9 +146,6 @@ class Automata {
     size_t state_pos = 0;
     size_t str_pos = 0;
 
-    std::cout << "fail state: " << fail_state_ << "\n";
-    std::cout << "match_state_: " << match_state_<< "\n";
-
     // run the state vector until state reaches fail or match state, or
     // until the string is all consumed
     while (state_pos != fail_state_ && state_pos != match_state_
@@ -160,16 +157,13 @@ class Automata {
     // the string
     if (comp_end) {
       if ((state_pos == match_state_) && (str_pos == str.length())) {
-        std::cout << "return Automata 1: " << (state_pos == match_state_) << "\n";
         return std::tuple<bool, size_t>(state_pos == match_state_, str_pos);
       }
 
-      std::cout << "return Automata 2: " << false << "\n";
       return std::tuple<bool, size_t>(false, str_pos);
     } else {
       // if comp_end is false, compare only if the states reached the
       // match state
-      std::cout << "state_pos: " << state_pos << "\n";
       return std::tuple<bool, size_t>(state_pos == match_state_, str_pos);
     }
   }
@@ -184,10 +178,11 @@ class Automata {
     return state_pos;
   }
 
+  size_t fail_state_;
  private:
   std::vector<std::unique_ptr<State>> states_;
   size_t match_state_;
-  size_t fail_state_;
+
   size_t start_state_;
 };
 
@@ -202,7 +197,6 @@ class StateChar : public State {
   }
 
   std::tuple<size_t, size_t> Next(const std::string& str, size_t pos) override {
-    std::cout << "char: str[pos]: " << str[pos] << "; c_: " << c_ << "\n";
     if (c_ == str[pos]) {
       return std::tuple<size_t, size_t>(GetNextStates()[0], pos + 1);
     }
@@ -342,10 +336,12 @@ class StateGroup: public State {
     AT
   };
 
-  StateGroup(Automata& states, Type type, std::vector<Automata>&& automatas)
+  StateGroup(Automata& states, Type type,
+      std::vector<std::unique_ptr<Automata>>&& automatas)
     : State(StateType::QUESTION, states)
     , type_{type}
-    , automatas_{std::move(automatas)} {}
+    , automatas_{std::move(automatas)}
+    , match_one_{false} {}
 
   std::tuple<bool, size_t> BasicCheck(const std::string& str,
       size_t pos) const {
@@ -356,9 +352,7 @@ class StateGroup: public State {
     // each automata is a part of a union of the group, in basic check,
     // we want find only if any automata is true
     for (auto& automata : automatas_) {
-      std::cout << "str_part: " << str_part << "; pos: " << pos << "\n";
-      std::tie(r, str_pos) = automata.Exec(str_part, false);
-      std::cout << "r: " << r << "; str_pos: " << str_pos << "\n";
+      std::tie(r, str_pos) = automata->Exec(str_part, false);
       if (r) {
         return std::tuple<bool, size_t>(r, pos + str_pos);
       }
@@ -377,6 +371,30 @@ class StateGroup: public State {
         break;
       }
 
+      case Type::ANY: {
+        return true;
+        break;
+      }
+
+      case Type::STAR: {
+        return true;
+        break;
+      }
+
+      case Type::PLUS: {
+        bool r;
+        std::tie(r, std::ignore) = BasicCheck(str, pos);
+        return r;
+        break;
+      }
+
+      case Type::NEG: {
+        bool r;
+        std::tie(r, std::ignore) = BasicCheck(str, pos);
+        return !r;
+        break;
+      }
+
       default:
         return false;
         break;
@@ -384,6 +402,8 @@ class StateGroup: public State {
   }
 
   std::tuple<size_t, size_t> Next(const std::string& str, size_t pos) override {
+    // STATE 1 -> is the next state
+    // STATE 0 -> is the same state
     switch (type_) {
       case Type::BASIC:
       case Type::AT: {
@@ -391,10 +411,67 @@ class StateGroup: public State {
         size_t new_pos;
         std::tie(r, new_pos) = BasicCheck(str, pos);
         if (r) {
-          return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos);
+          return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
         }
 
         return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
+        break;
+      }
+
+      case Type::ANY: {
+        // ANY always return true, because the pattern matches if zero or one
+        // occurrences of any of the patterns in the pattern_list match
+        // the input string, but if it matches we must change the pos, but if
+        // it doesn't match, we must return the same pos
+        bool r;
+        size_t new_pos;
+        std::tie(r, new_pos) = BasicCheck(str, pos);
+        if (r) {
+          return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
+        }
+
+        return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+        break;
+      }
+
+      case Type::STAR: {
+        bool r;
+        size_t new_pos;
+        std::tie(r, new_pos) = BasicCheck(str, pos);
+        if (r) {
+          return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos);
+        }
+
+        return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+        break;
+      }
+
+      case Type::PLUS: {
+        bool r;
+        size_t new_pos;
+        std::tie(r, new_pos) = BasicCheck(str, pos);
+        if (r) {
+          match_one_ = true;
+          return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos);
+        }
+
+        if (match_one_) {
+          return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+        } else {
+          return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
+        }
+        break;
+      }
+
+      case Type::NEG: {
+        bool r;
+        size_t new_pos;
+        std::tie(r, new_pos) = BasicCheck(str, pos);
+        if (r) {
+          return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
+        }
+
+        return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
         break;
       }
 
@@ -406,7 +483,8 @@ class StateGroup: public State {
 
  private:
   Type type_;
-  std::vector<Automata> automatas_;
+  std::vector<std::unique_ptr<Automata>> automatas_;
+  bool match_one_;
 };
 
 enum class TokenKind {
@@ -833,6 +911,10 @@ class GroupNode: public AstNode {
     return glob_.get();
   }
 
+  GroupType GetGroupType() const {
+    return group_type_;
+  }
+
  private:
   std::unique_ptr<AstNode> glob_;
   GroupType group_type_;
@@ -1249,28 +1331,53 @@ class AstConsumer {
   void ExecGroup(AstNode* node, Automata& automata) {
     GroupNode* group_node = static_cast<GroupNode*>(node);
     AstNode* union_node = group_node->GetGlob();
-    std::vector<Automata> vec_automatas = ExecUnion(union_node);
-    NewState<StateGroup>(automata, StateGroup::Type::BASIC,
-        std::move(vec_automatas));
+    std::vector<std::unique_ptr<Automata>> automatas = ExecUnion(union_node);
+
+    StateGroup::Type state_group_type;
+    switch (group_node->GetGroupType()) {
+      case GroupNode::GroupType::BASIC:
+        state_group_type = StateGroup::Type::BASIC;
+        break;
+
+      case GroupNode::GroupType::ANY:
+        state_group_type = StateGroup::Type::ANY;
+        break;
+
+      case GroupNode::GroupType::STAR:
+        state_group_type = StateGroup::Type::STAR;
+        break;
+
+      case GroupNode::GroupType::PLUS:
+        state_group_type = StateGroup::Type::PLUS;
+        break;
+
+      case GroupNode::GroupType::AT:
+        state_group_type = StateGroup::Type::AT;
+        break;
+    }
+
+    NewState<StateGroup>(automata, state_group_type, std::move(automatas));
+    automata.GetState(current_state_).AddNextState(current_state_);
   }
 
-  std::vector<Automata> ExecUnion(AstNode* node) {
+  std::vector<std::unique_ptr<Automata>> ExecUnion(AstNode* node) {
     UnionNode* union_node = static_cast<UnionNode*>(node);
     auto& items = union_node->GetItems();
-    std::vector<Automata> vec_automatas;
+    std::vector<std::unique_ptr<Automata>> vec_automatas;
     for (auto& item : items) {
-      Automata automata;
+      std::unique_ptr<Automata> automata_ptr(new Automata);
       AstConsumer ast_consumer;
-      ast_consumer.ExecConcat(item.get(), automata);
+      ast_consumer.ExecConcat(item.get(), *automata_ptr);
 
-      size_t match_state = automata.NewState<StateMatch>();
-      automata.GetState(ast_consumer.preview_state_).AddNextState(match_state);
-      automata.SetMatchState(match_state);
+      size_t match_state = automata_ptr->NewState<StateMatch>();
+      automata_ptr->GetState(ast_consumer.preview_state_)
+          .AddNextState(match_state);
+      automata_ptr->SetMatchState(match_state);
 
-      size_t fail_state = automata.NewState<StateFail>();
-      automata.SetFailState(fail_state);
+      size_t fail_state = automata_ptr->NewState<StateFail>();
+      automata_ptr->SetFailState(fail_state);
 
-      vec_automatas.push_back(std::move(automata));
+      vec_automatas.push_back(std::move(automata_ptr));
     }
 
     return vec_automatas;

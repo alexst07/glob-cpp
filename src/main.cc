@@ -115,7 +115,8 @@ int main(int argc, char **argv) {
   // PrintAst("+((a)|ts|s)");
   // PrintAst("+(a)");
   // PrintAst("*-[0-9].jtl");
-  std::cout << "'te*t(x)', 'teste' -> " << TestGlob2("t(xz)", "tee") << std::endl;
+  // std::cout << "'te*t(x)', 'teste' -> " << TestGlob2("t(e[a-f])", "tes") << std::endl;
+  std::cout << "'te*t(x)', 'teste' -> " << TestGlob2("+([a-z])w", "tw") << std::endl;
   return 0;
 }
 
