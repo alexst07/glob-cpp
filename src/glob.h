@@ -6,6 +6,11 @@
 #include <vector>
 #include <memory>
 
+
+template<class charT>
+using String = std::basic_string<charT>;
+
+template<class charT>
 class Automata;
 
 class Error: public std::exception {
@@ -30,28 +35,28 @@ enum class StateType {
   UNION,
 };
 
+template <class charT>
 class State {
  public:
-  State(StateType type, Automata& states)
+  State(StateType type, Automata<charT>& states)
     : type_{type}
     , states_{states}{}
 
-  virtual bool Check(const std::string& str, size_t pos) const = 0;
+  virtual bool Check(const String<charT>& str, size_t pos) const = 0;
 
   virtual std::tuple<size_t, size_t>
-  Next(const std::string& str, size_t pos) = 0;
+  Next(const String<charT>& str, size_t pos) = 0;
 
   StateType Type() const {
     return type_;
-  }
 
-  const Automata& GetAutomata() const {
+  }
+  const Automata<charT>& GetAutomata() const {
     return states_;
   }
 
-  State& AddNextState(size_t state_pos) {
+  void AddNextState(size_t state_pos) {
     next_states_.push_back(state_pos);
-    return *this;
   }
 
   const std::vector<size_t>& GetNextStates() const {
@@ -60,53 +65,57 @@ class State {
 
  private:
   StateType type_;
-  Automata& states_;
+  Automata<charT>& states_;
   std::vector<size_t> next_states_;
 };
 
-class StateFail : public State {
+template<class charT>
+class StateFail : public State<charT> {
  public:
-  StateFail(Automata& states)
-    : State(StateType::FAIL, states){}
+  StateFail(Automata<charT>& states)
+    : State<charT>(StateType::FAIL, states){}
 
-  bool Check(const std::string& str, size_t pos) const override {
+  bool Check(const String<charT>& str, size_t pos) const override {
     return false;
   }
 
-  std::tuple<size_t, size_t> Next(const std::string& str, size_t pos) override {
+  std::tuple<size_t, size_t> Next(const String<charT>& str, size_t pos) override {
     return std::tuple<size_t, size_t>(0, ++pos);
   }
 };
 
-class StateMatch : public State {
+template<class charT>
+class StateMatch : public State<charT> {
  public:
-  StateMatch(Automata& states)
-    : State(StateType::MATCH, states){}
+  StateMatch(Automata<charT>& states)
+    : State<charT>(StateType::MATCH, states){}
 
-  bool Check(const std::string& str, size_t pos) const override {
+  bool Check(const String<charT>& str, size_t pos) const override {
     return true;
   }
 
-  std::tuple<size_t, size_t> Next(const std::string& str, size_t pos) override {
+  std::tuple<size_t, size_t> Next(const String<charT>& str,
+      size_t pos) override {
     return std::tuple<size_t, size_t>(0, ++pos);
   }
 };
 
+template<class charT>
 class Automata {
  public:
   Automata() = default;
 
-  Automata(const Automata&) = delete;
+  Automata(const Automata<charT>&) = delete;
 
-  Automata& operator=(const Automata& automata) = delete;
+  Automata<charT>& operator=(const Automata<charT>& automata) = delete;
 
-  Automata(Automata&& automata)
+  Automata(Automata<charT>&& automata)
     : states_{std::move(automata.states_)}
     , match_state_{automata.match_state_}
     , fail_state_{std::exchange(automata.fail_state_, 0)}
     , start_state_{std::exchange(automata.start_state_, 0)} {}
 
-  Automata& operator=(Automata&& automata) {
+  Automata<charT>& operator=(Automata<charT>&& automata) {
     states_ = std::move(automata.states_);
     match_state_ = automata.match_state_;
     fail_state_ = automata.fail_state_;
@@ -115,11 +124,11 @@ class Automata {
     return *this;
   }
 
-  const State& GetState(size_t pos) const {
+  const State<charT>& GetState(size_t pos) const {
     return *states_[pos];
   }
 
-  State& GetState(size_t pos) {
+  State<charT>& GetState(size_t pos) {
     return *states_[pos];
   }
 
@@ -127,12 +136,12 @@ class Automata {
     return fail_state_;
   }
 
-  Automata& SetFailState(size_t state_pos) {
+  Automata<charT>& SetFailState(size_t state_pos) {
     fail_state_ = state_pos;
     return *this;
   }
 
-  Automata& SetMatchState(size_t state_pos) {
+  Automata<charT>& SetMatchState(size_t state_pos) {
     match_state_ = state_pos;
     return *this;
   }
@@ -141,7 +150,7 @@ class Automata {
     return states_.size();
   }
 
-  std::tuple<bool, size_t> Exec(const std::string str,
+  std::tuple<bool, size_t> Exec(const String<charT>& str,
       bool comp_end = true) const {
     size_t state_pos = 0;
     size_t str_pos = 0;
@@ -171,7 +180,7 @@ class Automata {
   template<class T, typename... Args>
   size_t NewState(Args&&... args) {
     size_t state_pos = states_.size();
-    auto state = std::unique_ptr<State>(new T(*this,
+    auto state = std::unique_ptr<State<charT>>(new T(*this,
         std::forward<Args>(args)...));
 
     states_.push_back(std::move(state));
@@ -180,23 +189,28 @@ class Automata {
 
   size_t fail_state_;
  private:
-  std::vector<std::unique_ptr<State>> states_;
+  std::vector<std::unique_ptr<State<charT>>> states_;
   size_t match_state_;
 
   size_t start_state_;
 };
 
-class StateChar : public State {
+template<class charT>
+class StateChar : public State<charT> {
+  using State<charT>::GetNextStates;
+  using State<charT>::GetAutomata;
+
  public:
-  StateChar(Automata& states, char c)
-    : State(StateType::CHAR, states)
+  StateChar(Automata<charT>& states, charT c)
+    : State<charT>(StateType::CHAR, states)
     , c_{c}{}
 
-  bool Check(const std::string& str, size_t pos) const override {
+  bool Check(const String<charT>& str, size_t pos) const override {
     return(c_ == str[pos]);
   }
 
-  std::tuple<size_t, size_t> Next(const std::string& str, size_t pos) override {
+  std::tuple<size_t, size_t> Next(const String<charT>& str,
+      size_t pos) override {
     if (c_ == str[pos]) {
       return std::tuple<size_t, size_t>(GetNextStates()[0], pos + 1);
     }
@@ -204,36 +218,44 @@ class StateChar : public State {
     return std::tuple<size_t, size_t>(GetAutomata().FailState(), pos + 1);
   }
  private:
-  char c_;
+  charT c_;
 };
 
-class StateAny : public State {
- public:
-  StateAny(Automata& states)
-    : State(StateType::QUESTION, states){}
+template<class charT>
+class StateAny : public State<charT> {
+  using State<charT>::GetNextStates;
+  using State<charT>::GetAutomata;
 
-  bool Check(const std::string& str, size_t pos) const override {
+ public:
+  StateAny(Automata<charT>& states)
+    : State<charT>(StateType::QUESTION, states){}
+
+  bool Check(const String<charT>& str, size_t pos) const override {
     // as it match any char, it is always trye
     return true;
   }
 
-  std::tuple<size_t, size_t> Next(const std::string& str, size_t pos) override {
+  std::tuple<size_t, size_t> Next(const String<charT>& str, size_t pos) override {
     // state any always match with any char
     return std::tuple<size_t, size_t>(GetNextStates()[0], pos + 1);
   }
 };
 
-class StateStar : public State {
- public:
-  StateStar(Automata& states)
-    : State(StateType::MULT, states){}
+template<class charT>
+class StateStar : public State<charT> {
+  using State<charT>::GetNextStates;
+  using State<charT>::GetAutomata;
 
-  bool Check(const std::string& str, size_t pos) const override {
+ public:
+  StateStar(Automata<charT>& states)
+    : State<charT>(StateType::MULT, states){}
+
+  bool Check(const String<charT>& str, size_t pos) const override {
     // as it match any char, it is always trye
     return true;
   }
 
-  std::tuple<size_t, size_t> Next(const std::string& str, size_t pos) override {
+  std::tuple<size_t, size_t> Next(const String<charT>& str, size_t pos) override {
     // next state vector from StateStar has two elements, the element 0 points
     // to the same state, and the element points to next state if the
     // conditions is satisfied
@@ -254,47 +276,55 @@ class StateStar : public State {
   }
 };
 
+template<class charT>
 class SetItem {
  public:
   SetItem() = default;
 
-  virtual bool Check(char c) const = 0;
+  virtual bool Check(charT c) const = 0;
 };
 
-class SetItemChar: public SetItem {
+template<class charT>
+class SetItemChar: public SetItem<charT> {
  public:
-  SetItemChar(char c): c_{c} {}
+  SetItemChar(charT c): c_{c} {}
 
-  bool Check(char c) const override {
+  bool Check(charT c) const override {
     return c == c_;
   }
  private:
-  char c_;
+  charT c_;
 };
 
-class SetItemRange: public SetItem {
+template<class charT>
+class SetItemRange: public SetItem<charT> {
  public:
-  SetItemRange(char start, char end)
+  SetItemRange(charT start, charT end)
     : start_{start < end? start : end}
     , end_{start < end? end : start} {}
 
-  bool Check(char c) const override {
+  bool Check(charT c) const override {
     return (c >= start_) && (c <= end_);
   }
  private:
-  char start_;
-  char end_;
+  charT start_;
+  charT end_;
 };
 
-class StateSet : public State {
+template<class charT>
+class StateSet : public State<charT> {
+  using State<charT>::GetNextStates;
+  using State<charT>::GetAutomata;
+
  public:
-  StateSet(Automata& states, std::vector<std::unique_ptr<SetItem>> items,
+  StateSet(Automata<charT>& states,
+      std::vector<std::unique_ptr<SetItem<charT>>> items,
       bool neg = false)
-    : State(StateType::SET, states)
+    : State<charT>(StateType::SET, states)
     , items_{std::move(items)}
     , neg_{neg} {}
 
-  bool SetCheck(const std::string& str, size_t pos) const {
+  bool SetCheck(const String<charT>& str, size_t pos) const {
     for (auto& item : items_) {
       // if any item match, then the set match with char
       if (item.get()->Check(str[pos])) {
@@ -305,7 +335,7 @@ class StateSet : public State {
     return false;
   }
 
-  bool Check(const std::string& str, size_t pos) const override {
+  bool Check(const String<charT>& str, size_t pos) const override {
     if (neg_) {
       return !SetCheck(str, pos);
     }
@@ -313,7 +343,7 @@ class StateSet : public State {
     return SetCheck(str, pos);
   }
 
-  std::tuple<size_t, size_t> Next(const std::string& str, size_t pos) override {
+  std::tuple<size_t, size_t> Next(const String<charT>& str, size_t pos) override {
     if (Check(str, pos)) {
       return std::tuple<size_t, size_t>(GetNextStates()[0], pos + 1);
     }
@@ -321,11 +351,15 @@ class StateSet : public State {
     return std::tuple<size_t, size_t>(GetAutomata().FailState(), pos + 1);
   }
  private:
-  std::vector<std::unique_ptr<SetItem>> items_;
+  std::vector<std::unique_ptr<SetItem<charT>>> items_;
   bool neg_;
 };
 
-class StateGroup: public State {
+template<class charT>
+class StateGroup: public State<charT> {
+  using State<charT>::GetNextStates;
+  using State<charT>::GetAutomata;
+
  public:
   enum class Type {
     BASIC,
@@ -336,16 +370,16 @@ class StateGroup: public State {
     AT
   };
 
-  StateGroup(Automata& states, Type type,
-      std::vector<std::unique_ptr<Automata>>&& automatas)
-    : State(StateType::QUESTION, states)
+  StateGroup(Automata<charT>& states, Type type,
+      std::vector<std::unique_ptr<Automata<charT>>>&& automatas)
+    : State<charT>(StateType::QUESTION, states)
     , type_{type}
     , automatas_{std::move(automatas)}
     , match_one_{false} {}
 
-  std::tuple<bool, size_t> BasicCheck(const std::string& str,
+  std::tuple<bool, size_t> BasicCheck(const String<charT>& str,
       size_t pos) const {
-    std::string str_part = str.substr(pos);
+    String<charT> str_part = str.substr(pos);
     bool r;
     size_t str_pos;
 
@@ -361,7 +395,7 @@ class StateGroup: public State {
     return std::tuple<bool, size_t>(false, pos + str_pos);
   }
 
-  bool Check(const std::string& str, size_t pos) const override {
+  bool Check(const String<charT>& str, size_t pos) const override {
     switch (type_) {
       case Type::BASIC:
       case Type::AT: {
@@ -401,7 +435,7 @@ class StateGroup: public State {
     }
   }
 
-  std::tuple<size_t, size_t> Next(const std::string& str, size_t pos) override {
+  std::tuple<size_t, size_t> Next(const String<charT>& str, size_t pos) override {
     // STATE 1 -> is the next state
     // STATE 0 -> is the same state
     switch (type_) {
@@ -433,7 +467,7 @@ class StateGroup: public State {
     }
   }
 
-  std::tuple<size_t, size_t> NextNeg(const std::string& str, size_t pos) {
+  std::tuple<size_t, size_t> NextNeg(const String<charT>& str, size_t pos) {
     bool r;
     size_t new_pos;
     std::tie(r, new_pos) = BasicCheck(str, pos);
@@ -444,7 +478,7 @@ class StateGroup: public State {
     return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
   }
 
-  std::tuple<size_t, size_t> NextBasic(const std::string& str, size_t pos) {
+  std::tuple<size_t, size_t> NextBasic(const String<charT>& str, size_t pos) {
     bool r;
     size_t new_pos;
     std::tie(r, new_pos) = BasicCheck(str, pos);
@@ -455,7 +489,7 @@ class StateGroup: public State {
     return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
   }
 
-  std::tuple<size_t, size_t> NextAny(const std::string& str, size_t pos) {
+  std::tuple<size_t, size_t> NextAny(const String<charT>& str, size_t pos) {
     bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
     if (res) {
       return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
@@ -475,7 +509,7 @@ class StateGroup: public State {
     return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
   }
 
-  std::tuple<size_t, size_t> NextStar(const std::string& str, size_t pos) {
+  std::tuple<size_t, size_t> NextStar(const String<charT>& str, size_t pos) {
     bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
     if (res) {
       return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
@@ -500,7 +534,7 @@ class StateGroup: public State {
     return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
   }
 
-  std::tuple<size_t, size_t> NextPlus(const std::string& str, size_t pos) {
+  std::tuple<size_t, size_t> NextPlus(const String<charT>& str, size_t pos) {
     // case where the next state matches and the group already matched
     // one time -> goes to next state
     bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
@@ -544,7 +578,7 @@ class StateGroup: public State {
 
  private:
   Type type_;
-  std::vector<std::unique_ptr<Automata>> automatas_;
+  std::vector<std::unique_ptr<Automata<charT>>> automatas_;
   bool match_one_;
 };
 
@@ -564,15 +598,16 @@ static const char* token_name_str[] = {
   ""
 };
 
+template<class charT>
 class Token {
  public:
   Token(TokenKind kind): kind_{kind} {}
-  Token(TokenKind kind, char value): kind_{kind}, value_{value} {}
+  Token(TokenKind kind, charT value): kind_{kind}, value_{value} {}
   TokenKind Kind() const {
     return kind_;
   }
 
-  char Value() const {
+  charT Value() const {
     return value_;
   }
 
@@ -592,24 +627,29 @@ class Token {
     return kind_ != kind;
   }
  private:
-  friend std::ostream& operator<<(std::ostream& stream, const Token& token);
+  friend
+  std::ostream& operator<<(std::ostream& stream, const Token<charT>& token);
+
   TokenKind kind_;
-  char value_;
+  charT value_;
 };
 
-inline std::ostream& operator<<(std::ostream& stream, const Token& token) {
+template<class charT>
+inline std::ostream& operator<<(std::ostream& stream,
+    const Token<charT>& token) {
   stream  << '[' << token_name_str[static_cast<int>(token.kind_)] << ']';
   return stream;
 }
 
+template<class charT>
 class Lexer {
  public:
   static const char kEndOfInput = -1;
 
-  Lexer(const std::string& str): str_(str), pos_{0}, c_{str[0]} {}
+  Lexer(const String<charT>& str): str_(str), pos_{0}, c_{str[0]} {}
 
-  std::vector<Token> Scanner() {
-    std::vector<Token> tokens;
+  std::vector<Token<charT>> Scanner() {
+    std::vector<Token<charT>> tokens;
     while(true) {
       switch (c_) {
         case '?': {
@@ -733,12 +773,12 @@ class Lexer {
   }
 
  private:
-  inline Token Select(TokenKind k) {
-    return Token(k);
+  inline Token<charT> Select(TokenKind k) {
+    return Token<charT>(k);
   }
 
-  inline Token Select(TokenKind k, char value) {
-    return Token(k, value);
+  inline Token<charT> Select(TokenKind k, charT value) {
+    return Token<charT>(k, value);
   }
 
   void Advance() {
@@ -750,7 +790,7 @@ class Lexer {
     c_ = str_[++pos_];
   }
 
-  inline bool IsSpecialChar(char c) {
+  inline bool IsSpecialChar(charT c) {
     bool b = c == '?' ||
              c == '*' ||
              c == '+' ||
@@ -765,9 +805,9 @@ class Lexer {
     return b;
   }
 
-  std::string str_;
+  String<charT> str_;
   size_t pos_;
-  char c_;
+  charT c_;
 };
 
 
@@ -784,13 +824,15 @@ class Lexer {
   V(UnionNode)            \
   V(GlobNode)
 
+template<class charT>
 class AstVisitor;
 
 // declare all classes used for nodes
-#define DECLARE_TYPE_CLASS(type) class type;
+#define DECLARE_TYPE_CLASS(type) template<class charT> class type;
   AST_NODE_LIST(DECLARE_TYPE_CLASS)
 #undef DECLARE_TYPE_CLASS
 
+template<class charT>
 class AstNode {
  public:
   enum class Type {
@@ -813,7 +855,7 @@ class AstNode {
     return type_;
   }
 
-  virtual void Accept(AstVisitor* visitor) = 0;
+  virtual void Accept(AstVisitor<charT>* visitor) = 0;
 
  protected:
   AstNode(Type type): type_{type} {}
@@ -822,22 +864,26 @@ class AstNode {
   Type type_;
 };
 
+template<class charT>
+using AstNodePtr = std::unique_ptr<AstNode<charT>>;
+
+template<class charT>
 class AstVisitor {
  public:
 
 // define all visitor methods for the nodes
 #define DECLARE_VIRTUAL_FUNC(type) \
-  virtual void Visit##type(type* /*node*/) {}
+  virtual void Visit##type(type<charT>* /*node*/) {}
   AST_NODE_LIST(DECLARE_VIRTUAL_FUNC)
 #undef DECLARE_VIRTUAL_FUNC
 };
 
-
-class CharNode: public AstNode {
+template<class charT>
+class CharNode: public AstNode<charT> {
  public:
-  CharNode(char c): AstNode(Type::CHAR), c_{c} {}
+  CharNode(charT c): AstNode<charT>(AstNode<charT>::Type::CHAR), c_{c} {}
 
-  virtual void Accept(AstVisitor* visitor) {
+  virtual void Accept(AstVisitor<charT>* visitor) {
     visitor->VisitCharNode(this);
   }
 
@@ -846,108 +892,115 @@ class CharNode: public AstNode {
   }
 
  private:
-  char c_;
+  charT c_;
 };
 
-class RangeNode: public AstNode {
+template<class charT>
+class RangeNode: public AstNode<charT> {
  public:
-  RangeNode(std::unique_ptr<AstNode>&& start, std::unique_ptr<AstNode>&& end)
-    : AstNode(Type::RANGE)
+  RangeNode(AstNodePtr<charT>&& start, AstNodePtr<charT>&& end)
+    : AstNode<charT>(AstNode<charT>::Type::RANGE)
     , start_{std::move(start)}
     , end_{std::move(end)} {}
 
-  virtual void Accept(AstVisitor* visitor) {
+  virtual void Accept(AstVisitor<charT>* visitor) {
     visitor->VisitRangeNode(this);
   }
 
-  AstNode* GetStart() const {
+  AstNode<charT>* GetStart() const {
     return start_.get();
   }
 
-  AstNode* GetEnd() const {
+  AstNode<charT>* GetEnd() const {
     return end_.get();
   }
 
  private:
-  std::unique_ptr<AstNode> start_;
-  std::unique_ptr<AstNode> end_;
+  AstNodePtr<charT> start_;
+  AstNodePtr<charT> end_;
 };
 
-class SetItemsNode: public AstNode {
+template<class charT>
+class SetItemsNode: public AstNode<charT> {
  public:
-  SetItemsNode(std::vector<std::unique_ptr<AstNode>>&& items)
-    : AstNode(Type::SET_ITEMS)
+  SetItemsNode(std::vector<AstNodePtr<charT>>&& items)
+    : AstNode<charT>(AstNode<charT>::Type::SET_ITEMS)
     , items_{std::move(items)} {}
 
-  virtual void Accept(AstVisitor* visitor) {
+  virtual void Accept(AstVisitor<charT>* visitor) {
     visitor->VisitSetItemsNode(this);
   }
 
-  std::vector<std::unique_ptr<AstNode>>& GetItems() {
+  std::vector<AstNodePtr<charT>>& GetItems() {
     return items_;
   }
 
  private:
-  std::vector<std::unique_ptr<AstNode>> items_;
+  std::vector<AstNodePtr<charT>> items_;
 };
 
-class PositiveSetNode: public AstNode {
+template<class charT>
+class PositiveSetNode: public AstNode<charT> {
  public:
-  PositiveSetNode(std::unique_ptr<AstNode>&& set)
-    : AstNode(Type::POS_SET)
+  PositiveSetNode(AstNodePtr<charT>&& set)
+    : AstNode<charT>(AstNode<charT>::Type::POS_SET)
     , set_{std::move(set)} {}
 
-  virtual void Accept(AstVisitor* visitor) {
+  virtual void Accept(AstVisitor<charT>* visitor) {
     visitor->VisitPositiveSetNode(this);
   }
 
-  AstNode* GetSet() {
+  AstNode<charT>* GetSet() {
     return set_.get();
   }
 
  private:
-  std::unique_ptr<AstNode> set_;
+  AstNodePtr<charT> set_;
 };
 
-class NegativeSetNode: public AstNode {
+template<class charT>
+class NegativeSetNode: public AstNode<charT> {
  public:
-  NegativeSetNode(std::unique_ptr<AstNode>&& set)
-    : AstNode(Type::NEG_SET)
+  NegativeSetNode(AstNodePtr<charT>&& set)
+    : AstNode<charT>(AstNode<charT>::Type::NEG_SET)
     , set_{std::move(set)} {}
 
-  virtual void Accept(AstVisitor* visitor) {
+  virtual void Accept(AstVisitor<charT>* visitor) {
     visitor->VisitNegativeSetNode(this);
   }
 
-  AstNode* GetSet() {
+  AstNode<charT>* GetSet() {
     return set_.get();
   }
 
  private:
-  std::unique_ptr<AstNode> set_;
+  AstNodePtr<charT> set_;
 };
 
-class StarNode: public AstNode {
+template<class charT>
+class StarNode: public AstNode<charT> {
  public:
   StarNode()
-    : AstNode(Type::STAR) {}
+    : AstNode<charT>(AstNode<charT>::Type::STAR) {}
 
-  virtual void Accept(AstVisitor* visitor) {
+  virtual void Accept(AstVisitor<charT>* visitor) {
     visitor->VisitStarNode(this);
   }
 };
 
-class AnyNode: public AstNode {
+template<class charT>
+class AnyNode: public AstNode<charT> {
  public:
   AnyNode()
-    : AstNode(Type::ANY) {}
+    : AstNode<charT>(AstNode<charT>::Type::ANY) {}
 
-  virtual void Accept(AstVisitor* visitor) {
+  virtual void Accept(AstVisitor<charT>* visitor) {
     visitor->VisitAnyNode(this);
   }
 };
 
-class GroupNode: public AstNode {
+template<class charT>
+class GroupNode: public AstNode<charT> {
  public:
   enum class GroupType {
     BASIC,
@@ -958,16 +1011,16 @@ class GroupNode: public AstNode {
     AT
   };
 
-  GroupNode(GroupType group_type, std::unique_ptr<AstNode>&& glob)
-    : AstNode(Type::GROUP)
+  GroupNode(GroupType group_type, AstNodePtr<charT>&& glob)
+    : AstNode<charT>(AstNode<charT>::Type::GROUP)
     , glob_{std::move(glob)}
     , group_type_{group_type} {}
 
-  virtual void Accept(AstVisitor* visitor) {
+  virtual void Accept(AstVisitor<charT>* visitor) {
     visitor->VisitGroupNode(this);
   }
 
-  AstNode* GetGlob() {
+  AstNode<charT>* GetGlob() {
     return glob_.get();
   }
 
@@ -976,101 +1029,105 @@ class GroupNode: public AstNode {
   }
 
  private:
-  std::unique_ptr<AstNode> glob_;
+  AstNodePtr<charT> glob_;
   GroupType group_type_;
 };
 
-class ConcatNode: public AstNode {
+template<class charT>
+class ConcatNode: public AstNode<charT> {
  public:
-  ConcatNode(std::vector<std::unique_ptr<AstNode>>&& basic_glob)
-    : AstNode(Type::CONCAT_GLOB)
+  ConcatNode(std::vector<AstNodePtr<charT>>&& basic_glob)
+    : AstNode<charT>(AstNode<charT>::Type::CONCAT_GLOB)
     , basic_glob_{std::move(basic_glob)} {}
 
-  virtual void Accept(AstVisitor* visitor) {
+  virtual void Accept(AstVisitor<charT>* visitor) {
     visitor->VisitConcatNode(this);
   }
 
-  std::vector<std::unique_ptr<AstNode>>& GetBasicGlobs() {
+  std::vector<AstNodePtr<charT>>& GetBasicGlobs() {
     return basic_glob_;
   }
 
  private:
-  std::vector<std::unique_ptr<AstNode>> basic_glob_;
+  std::vector<AstNodePtr<charT>> basic_glob_;
 };
 
-class UnionNode: public AstNode {
+template<class charT>
+class UnionNode: public AstNode<charT> {
  public:
-  UnionNode(std::vector<std::unique_ptr<AstNode>>&& items)
-    : AstNode(Type::UNION)
+  UnionNode(std::vector<AstNodePtr<charT>>&& items)
+    : AstNode<charT>(AstNode<charT>::Type::UNION)
     , items_{std::move(items)} {}
 
-  virtual void Accept(AstVisitor* visitor) {
+  virtual void Accept(AstVisitor<charT>* visitor) {
     visitor->VisitUnionNode(this);
   }
 
-  std::vector<std::unique_ptr<AstNode>>& GetItems() {
+  std::vector<AstNodePtr<charT>>& GetItems() {
     return items_;
   }
 
  private:
-  std::vector<std::unique_ptr<AstNode>> items_;
+  std::vector<AstNodePtr<charT>> items_;
 };
 
-class GlobNode: public AstNode {
+template<class charT>
+class GlobNode: public AstNode<charT> {
  public:
-  GlobNode(std::unique_ptr<AstNode>&& glob)
-    : AstNode(Type::GLOB)
+  GlobNode(AstNodePtr<charT>&& glob)
+    : AstNode<charT>(AstNode<charT>::Type::GLOB)
     , glob_{std::move(glob)} {}
 
-  virtual void Accept(AstVisitor* visitor) {
+  virtual void Accept(AstVisitor<charT>* visitor) {
     visitor->VisitGlobNode(this);
   }
 
-  AstNode* GetConcat() {
+  AstNode<charT>* GetConcat() {
     return glob_.get();
   }
 
  private:
-  std::unique_ptr<AstNode> glob_;
+  AstNodePtr<charT> glob_;
 };
 
-using AstNodePtr = std::unique_ptr<AstNode>;
-
+template<class charT>
 class Parser {
  public:
   Parser() = delete;
 
-  Parser(std::vector<Token>&& tok_vec): tok_vec_{std::move(tok_vec)}, pos_{0} {}
+  Parser(std::vector<Token<charT>>&& tok_vec)
+    : tok_vec_{std::move(tok_vec)}
+    , pos_{0} {}
 
-  AstNodePtr GenAst() {
+  AstNodePtr<charT> GenAst() {
     return ParserGlob();
   }
 
  private:
-  AstNodePtr ParserChar() {
-    Token& tk = NextToken();
+  AstNodePtr<charT> ParserChar() {
+    Token<charT>& tk = NextToken();
     if (tk != TokenKind::CHAR) {
       throw Error("char expected");
     }
 
-    char c = tk.Value();
-    return AstNodePtr(new CharNode(c));
+    charT c = tk.Value();
+    return AstNodePtr<charT>(new CharNode<charT>(c));
   }
 
-  AstNodePtr ParserRange() {
-    AstNodePtr char_start = ParserChar();
+  AstNodePtr<charT> ParserRange() {
+    AstNodePtr<charT> char_start = ParserChar();
 
-    Token& tk = NextToken();
+    Token<charT>& tk = NextToken();
     if (tk != TokenKind::SUB) {
       throw Error("range expected");
     }
 
-    AstNodePtr char_end = ParserChar();
-    return AstNodePtr(
-        new RangeNode(std::move(char_start), std::move(char_end)));
+    AstNodePtr<charT> char_end = ParserChar();
+    return AstNodePtr<charT>(
+        new RangeNode<charT>(std::move(char_start), std::move(char_end)));
   }
 
-  AstNodePtr ParserSetItem() {
+  AstNodePtr<charT> ParserSetItem() {
     if (PeekAhead() == TokenKind::SUB) {
       return ParserRange();
     }
@@ -1078,8 +1135,8 @@ class Parser {
     return ParserChar();
   }
 
-  AstNodePtr ParserSetItems() {
-    std::vector<AstNodePtr> items;
+  AstNodePtr<charT> ParserSetItems() {
+    std::vector<AstNodePtr<charT>> items;
 
     do {
       items.push_back(ParserSetItem());
@@ -1087,38 +1144,38 @@ class Parser {
 
     Advance();
 
-    return AstNodePtr(new SetItemsNode(std::move(items)));
+    return AstNodePtr<charT>(new SetItemsNode(std::move(items)));
   }
 
-  AstNodePtr ParserSet() {
-    Token& tk = NextToken();
+  AstNodePtr<charT> ParserSet() {
+    Token<charT>& tk = NextToken();
 
     if (tk == TokenKind::LBRACKET) {
-      return AstNodePtr(new PositiveSetNode(ParserSetItems()));
+      return AstNodePtr<charT>(new PositiveSetNode<charT>(ParserSetItems()));
     } else if (tk == TokenKind::NEGLBRACKET) {
-      return AstNodePtr(new NegativeSetNode(ParserSetItems()));
+      return AstNodePtr<charT>(new NegativeSetNode<charT>(ParserSetItems()));
     } else {
       throw Error("set expected");
     }
   }
 
-  AstNodePtr ParserBasicGlob() {
-    Token& tk = GetToken();
+  AstNodePtr<charT> ParserBasicGlob() {
+    Token<charT>& tk = GetToken();
 
     switch (tk.Kind()) {
       case TokenKind::QUESTION:
         Advance();
-        return AstNodePtr(new AnyNode());
+        return AstNodePtr<charT>(new AnyNode<charT>());
         break;
 
       case TokenKind::STAR:
         Advance();
-        return AstNodePtr(new StarNode());
+        return AstNodePtr<charT>(new StarNode<charT>());
         break;
 
       case TokenKind::SUB:
         Advance();
-        return AstNodePtr(new CharNode('-'));
+        return AstNodePtr<charT>(new CharNode<charT>('-'));
         break;
 
       case TokenKind::CHAR:
@@ -1145,9 +1202,9 @@ class Parser {
     }
   }
 
-  AstNodePtr ParserGroup() {
-    GroupNode::GroupType type;
-    Token& tk = NextToken();
+  AstNodePtr<charT> ParserGroup() {
+    GroupNode<charT>::GroupType type;
+    Token<charT>& tk = NextToken();
 
     switch (tk.Kind()) {
       case TokenKind::LPAREN:
@@ -1179,18 +1236,18 @@ class Parser {
         break;
     }
 
-    AstNodePtr group_glob = ParserUnion();
+    AstNodePtr<charT> group_glob = ParserUnion();
     tk = NextToken();
     if (tk != TokenKind::RPAREN) {
       throw Error("Expected ')' at and of group");
     }
 
-    return AstNodePtr(new GroupNode(type, std::move(group_glob)));
+    return AstNodePtr<charT>(new GroupNode<charT>(type, std::move(group_glob)));
   }
 
-  AstNodePtr ParserConcat() {
+  AstNodePtr<charT> ParserConcat() {
     auto check_end = [&]() -> bool {
-      Token& tk = GetToken();
+      Token<charT>& tk = GetToken();
 
       switch (tk.Kind()) {
         case TokenKind::EOS:
@@ -1205,17 +1262,17 @@ class Parser {
       }
     };
 
-    std::vector<AstNodePtr> parts;
+    std::vector<AstNodePtr<charT>> parts;
 
     while (!check_end()) {
       parts.push_back(ParserBasicGlob());
     }
 
-    return AstNodePtr(new ConcatNode(std::move(parts)));
+    return AstNodePtr(new ConcatNode<charT>(std::move(parts)));
   }
 
-  AstNodePtr ParserUnion() {
-    std::vector<AstNodePtr> items;
+  AstNodePtr<charT> ParserUnion() {
+    std::vector<AstNodePtr<charT>> items;
     items.push_back(ParserConcat());
 
     while (GetToken() == TokenKind::UNION) {
@@ -1223,39 +1280,39 @@ class Parser {
       items.push_back(ParserConcat());
     }
 
-    return AstNodePtr(new UnionNode(std::move(items)));
+    return AstNodePtr<charT>(new UnionNode<charT>(std::move(items)));
   }
 
-  AstNodePtr ParserGlob() {
-    AstNodePtr glob = ParserConcat();
+  AstNodePtr<charT> ParserGlob() {
+    AstNodePtr<charT> glob = ParserConcat();
 
     if (GetToken() != TokenKind::EOS) {
       throw Error("Expected the end of glob");
     }
 
-    return AstNodePtr(new GlobNode(std::move(glob)));
+    return AstNodePtr<charT>(new GlobNode<charT>(std::move(glob)));
   }
 
-  inline const Token& GetToken() const {
+  inline const Token<charT>& GetToken() const {
     return tok_vec_.at(pos_);
   }
 
-  inline Token& GetToken() {
+  inline Token<charT>& GetToken() {
     return tok_vec_.at(pos_);
   }
 
-  inline const Token& PeekAhead() const {
+  inline const Token<charT>& PeekAhead() const {
     if (pos_ >= (tok_vec_.size() - 1))
       return tok_vec_.back();
 
     return tok_vec_.at(pos_ + 1);
   }
 
-  inline Token& NextToken() {
+  inline Token<charT>& NextToken() {
     if (pos_ >= (tok_vec_.size() - 1))
       return tok_vec_.back();
 
-    Token& tk = tok_vec_.at(pos_);
+    Token<charT>& tk = tok_vec_.at(pos_);
     pos_++;
     return tk;
   }
@@ -1272,16 +1329,17 @@ class Parser {
     return tok_vec_.size();
   }
 
-  std::vector<Token> tok_vec_;
+  std::vector<Token<charT>> tok_vec_;
   size_t pos_;
 };
 
+template<class charT>
 class AstConsumer {
  public:
   AstConsumer() = default;
 
-  void GenAutomata(AstNode* root_node, Automata& automata) {
-    AstNode* concat_node = static_cast<GlobNode*>(root_node)->GetConcat();
+  void GenAutomata(AstNode<charT>* root_node, Automata<charT>& automata) {
+    AstNode<charT>* concat_node = static_cast<GlobNode*>(root_node)->GetConcat();
     ExecConcat(concat_node, automata);
 
     size_t match_state = automata.NewState<StateMatch>();
@@ -1293,7 +1351,7 @@ class AstConsumer {
   }
 
  private:
-  void ExecConcat(AstNode* node, Automata& automata) {
+  void ExecConcat(AstNode<charT>* node, Automata<charT>& automata) {
     ConcatNode* concat_node = static_cast<ConcatNode*>(node);
     std::vector<AstNodePtr>& basic_globs = concat_node->GetBasicGlobs();
 
@@ -1302,7 +1360,7 @@ class AstConsumer {
     }
   }
 
-  void ExecBasicGlob(AstNode* node, Automata& automata) {
+  void ExecBasicGlob(AstNode<charT>* node, Automata<charT>& automata) {
     switch (node->GetType()) {
       case AstNode::Type::CHAR:
         ExecChar(node, automata);
@@ -1333,34 +1391,34 @@ class AstConsumer {
     }
   }
 
-  void ExecChar(AstNode* node, Automata& automata) {
+  void ExecChar(AstNode<charT>* node, Automata<charT>& automata) {
     CharNode* char_node = static_cast<CharNode*>(node);
     char c = char_node->GetValue();
     NewState<StateChar>(automata, c);
   }
 
-  void ExecAny(AstNode* node, Automata& automata) {
+  void ExecAny(AstNode<charT>* node, Automata<charT>& automata) {
     NewState<StateAny>(automata);
   }
 
-  void ExecStar(AstNode* node, Automata& automata) {
+  void ExecStar(AstNode<charT>* node, Automata<charT>& automata) {
     NewState<StateStar>(automata);
     automata.GetState(current_state_).AddNextState(current_state_);
   }
 
-  void ExecPositiveSet(AstNode* node, Automata& automata) {
+  void ExecPositiveSet(AstNode<charT>* node, Automata<charT>& automata) {
     PositiveSetNode* pos_set_node = static_cast<PositiveSetNode*>(node);
     auto items = ProcessSetItems(pos_set_node->GetSet());
     NewState<StateSet>(automata, std::move(items));
   }
 
-  void ExecNegativeSet(AstNode* node, Automata& automata) {
+  void ExecNegativeSet(AstNode<charT>* node, Automata<charT>& automata) {
     NegativeSetNode* pos_set_node = static_cast<NegativeSetNode*>(node);
     auto items = ProcessSetItems(pos_set_node->GetSet());
     NewState<StateSet>(automata, std::move(items), /*neg*/true);
   }
 
-  std::vector<std::unique_ptr<SetItem>> ProcessSetItems(AstNode* node) {
+  std::vector<std::unique_ptr<SetItem>> ProcessSetItems(AstNode<charT>* node) {
     SetItemsNode* set_node = static_cast<SetItemsNode*>(node);
     std::vector<std::unique_ptr<SetItem>> vec;
     auto& items = set_node->GetItems();
@@ -1371,7 +1429,7 @@ class AstConsumer {
     return vec;
   }
 
-  std::unique_ptr<SetItem> ProcessSetItem(AstNode* node) {
+  std::unique_ptr<SetItem> ProcessSetItem(AstNode<charT>* node) {
     if (node->GetType() == AstNode::Type::CHAR) {
       CharNode* char_node = static_cast<CharNode*>(node);
       char c = char_node->GetValue();
@@ -1388,9 +1446,9 @@ class AstConsumer {
     }
   }
 
-  void ExecGroup(AstNode* node, Automata& automata) {
+  void ExecGroup(AstNode<charT>* node, Automata<charT>& automata) {
     GroupNode* group_node = static_cast<GroupNode*>(node);
-    AstNode* union_node = group_node->GetGlob();
+    AstNode<charT>* union_node = group_node->GetGlob();
     std::vector<std::unique_ptr<Automata>> automatas = ExecUnion(union_node);
 
     StateGroup::Type state_group_type;
@@ -1424,7 +1482,7 @@ class AstConsumer {
     automata.GetState(current_state_).AddNextState(current_state_);
   }
 
-  std::vector<std::unique_ptr<Automata>> ExecUnion(AstNode* node) {
+  std::vector<std::unique_ptr<Automata>> ExecUnion(AstNode<charT>* node) {
     UnionNode* union_node = static_cast<UnionNode*>(node);
     auto& items = union_node->GetItems();
     std::vector<std::unique_ptr<Automata>> vec_automatas;
@@ -1448,7 +1506,7 @@ class AstConsumer {
   }
 
   template<class T, typename... Args>
-  void NewState(Automata& automata, Args&&... args) {
+  void NewState(Automata<charT>& automata, Args&&... args) {
     current_state_ = automata.NewState<T>(std::forward<Args>(args)...);
     if (preview_state_ >= 0) {
       automata.GetState(preview_state_).AddNextState(current_state_);
@@ -1461,19 +1519,20 @@ class AstConsumer {
   size_t current_state_ = 0;
 };
 
+template<class chart>
 class Glob {
  public:
-  Glob(const std::string& str) {
-    Lexer l(str);
-    std::vector<Token> tokens = l.Scanner();
-    Parser p(std::move(tokens));
+  Glob(const String<charT>& str) {
+    Lexer<charT> l(str);
+    std::vector<Token<charT>> tokens = l.Scanner();
+    Parser<charT> p(std::move(tokens));
     AstNodePtr ast_ptr = p.GenAst();
 
-    AstConsumer ast_consumer;
+    AstConsumer<charT> ast_consumer;
     ast_consumer.GenAutomata(ast_ptr.get(), automata_);
   }
 
-  bool Exec(const std::string& str) {
+  bool Exec(const String<charT>& str) {
     bool r;
     size_t pos;
     std::tie(r, pos) = automata_.Exec(str);
@@ -1483,10 +1542,12 @@ class Glob {
  private:
   Automata automata_;
 };
+
+template<class charT>
 class SimpleGlob {
  public:
   SimpleGlob() = default;
-  void Parser(const std::string& pattern) {
+  void Parser(const String<charT>& pattern) {
     size_t pos = 0;
     int preview_state = -1;
 
@@ -1528,11 +1589,11 @@ class SimpleGlob {
     automato_.SetFailState(fail_state);
   }
 
-  Automata& GetAutomata() {
+  Automata<charT>& GetAutomata() {
     return automato_;
   }
  private:
-  Automata automato_;
+  Automata<charT> automato_;
 };
 
 #endif  // GLOB_CPP_H
