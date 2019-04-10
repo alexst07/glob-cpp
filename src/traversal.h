@@ -4,6 +4,8 @@
 #include<iostream>
 #include "glob.h"
 
+namespace glob {
+
 template<class charT>
 class PrintTraversal: public AstVisitor<charT> {
  public:
@@ -189,5 +191,7 @@ void PrintAst(const String<charT>& str) {
   visitor.Visit(ast_ptr.get());
   std::cout << "\n";
 }
+
+} // namespace glob
 
 #endif  // GLOB_CPP_TRAVERSAL_H

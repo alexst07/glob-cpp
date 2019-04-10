@@ -6,6 +6,7 @@
 #include <vector>
 #include <memory>
 
+namespace glob {
 
 template<class charT>
 using String = std::basic_string<charT>;
@@ -1539,10 +1540,10 @@ class AstConsumer {
 };
 
 template<class charT>
-class Glob {
+class ExtendedGlob {
  public:
-  Glob(const String<charT>& str) {
-    Lexer<charT> l(str);
+  ExtendedGlob(const String<charT>& pattern) {
+    Lexer<charT> l(pattern);
     std::vector<Token<charT>> tokens = l.Scanner();
     Parser<charT> p(std::move(tokens));
     AstNodePtr<charT> ast_ptr = p.GenAst();
@@ -1551,10 +1552,19 @@ class Glob {
     ast_consumer.GenAutomata(ast_ptr.get(), automata_);
   }
 
+  ExtendedGlob(const ExtendedGlob&) = delete;
+  ExtendedGlob& operator=(ExtendedGlob&) = delete;
+
+  ExtendedGlob(ExtendedGlob&& glob): automata_{std::move(glob.automata_)} {}
+
+  ExtendedGlob& operator=(ExtendedGlob&& glob) {
+    automata_ = std::move(glob.automata_);
+    return *this;
+  }
+
   bool Exec(const String<charT>& str) {
     bool r;
-    size_t pos;
-    std::tie(r, pos) = automata_.Exec(str);
+    std::tie(r, std::ignore) = automata_.Exec(str);
     return r;
   }
 
@@ -1565,7 +1575,20 @@ class Glob {
 template<class charT>
 class SimpleGlob {
  public:
-  SimpleGlob() = default;
+  SimpleGlob(const String<charT>& pattern) {
+    Parser(pattern);
+  }
+
+  SimpleGlob(const SimpleGlob&) = delete;
+  SimpleGlob& operator=(SimpleGlob&) = delete;
+
+  SimpleGlob(SimpleGlob&& glob): automata_{std::move(glob.automata_)} {}
+
+  SimpleGlob& operator=(SimpleGlob&& glob) {
+    automata_ = std::move(glob.automata_);
+    return *this;
+  }
+
   void Parser(const String<charT>& pattern) {
     size_t pos = 0;
     int preview_state = -1;
@@ -1575,44 +1598,89 @@ class SimpleGlob {
       char c = pattern[pos];
       switch (c) {
         case '?': {
-          current_state = automato_.template NewState<StateAny<charT>>();
+          current_state = automata_.template NewState<StateAny<charT>>();
           ++pos;
           break;
         }
 
         case '*': {
-          current_state = automato_.template NewState<StateStar<charT>>();
-          automato_.GetState(current_state).AddNextState(current_state);
+          current_state = automata_.template NewState<StateStar<charT>>();
+          automata_.GetState(current_state).AddNextState(current_state);
           ++pos;
           break;
         }
 
         default: {
-          current_state = automato_.template NewState<StateChar<charT>>(c);
+          current_state = automata_.template NewState<StateChar<charT>>(c);
           ++pos;
           break;
         }
       }
 
       if (preview_state >= 0) {
-        automato_.GetState(preview_state).AddNextState(current_state);
+        automata_.GetState(preview_state).AddNextState(current_state);
       }
       preview_state = current_state;
     }
 
-    size_t match_state = automato_.template NewState<StateMatch<charT>>();
-    automato_.GetState(preview_state).AddNextState(match_state);
-    automato_.SetMatchState(match_state);
+    size_t match_state = automata_.template NewState<StateMatch<charT>>();
+    automata_.GetState(preview_state).AddNextState(match_state);
+    automata_.SetMatchState(match_state);
 
-    size_t fail_state = automato_.template NewState<StateFail<charT>>();
-    automato_.SetFailState(fail_state);
+    size_t fail_state = automata_.template NewState<StateFail<charT>>();
+    automata_.SetFailState(fail_state);
   }
 
-  Automata<charT>& GetAutomata() {
-    return automato_;
+  bool Exec(const String<charT>& str) {
+    bool r;
+    std::tie(r, std::ignore) = automata_.Exec(str);
+    return r;
   }
+
  private:
-  Automata<charT> automato_;
+  Automata<charT> automata_;
 };
+
+template<class charT>
+using extended_glob = ExtendedGlob<charT>;
+
+template<class charT>
+using no_extended_glob = SimpleGlob<charT>;
+
+template<class charT, class globT=extended_glob<charT>>
+class BasicGlob {
+ public:
+  BasicGlob(const String<charT>& pattern): glob_{pattern} {}
+
+  BasicGlob(const BasicGlob&) = delete;
+  BasicGlob& operator=(BasicGlob&) = delete;
+
+  BasicGlob(BasicGlob&& glob): glob_{std::move(glob.glob_)} {}
+
+  BasicGlob& operator=(BasicGlob&& glob) {
+    glob_ = std::move(glob.glob_);
+    return *this;
+  }
+
+ private:
+  bool Exec(const String<charT>& str) {
+    return glob_.Exec(str);
+  }
+
+  globT glob_;
+};
+
+template<class charT, class globT=extended_glob<charT>>
+BasicGlob<charT> Compile(const String<charT>& pattern) {
+  BasicGlob<charT, globT> glob(pattern);
+  return glob;
+}
+
+template<class charT, class globT=extended_glob<charT>>
+bool GlobMatch(const String<charT>& pattern, const BasicGlob<charT, globT>&) {
+
+}
+
+} // namespace glob
 
 #endif  // GLOB_CPP_H

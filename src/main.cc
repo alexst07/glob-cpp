@@ -3,6 +3,8 @@
 #include "glob.h"
 #include "traversal.h"
 
+using namespace glob;
+
 bool GlobMatch(const std::string& pattern, const std::string& str) {
   size_t px = 0;
   size_t nx = 0;
@@ -52,29 +54,34 @@ bool GlobMatch(const std::string& pattern, const std::string& str) {
   return true;
 }
 
-bool TestGlob(const std::string& pattern, const std::string& str) {
-  SimpleGlob<char> glob;
-  glob.Parser(pattern);
-  bool r;
-  size_t pos;
-  std::tie(r, pos) = glob.GetAutomata().Exec(str);
-  std::cout << "pos: " << pos << "\n";
-  return r;
-}
+// bool TestGlob(const std::string& pattern, const std::string& str) {
+//   SimpleGlob<char> glob;
+//   glob.Parser(pattern);
+//   bool r;
+//   size_t pos;
+//   std::tie(r, pos) = glob.GetAutomata().Exec(str);
+//   std::cout << "pos: " << pos << "\n";
+//   return r;
+// }
 
-bool TestGlob2(const std::string& pattern, const std::string& str) {
-  Glob<char> glob(pattern);
-  return glob.Exec(str);
-}
+// bool TestGlob2(const std::string& pattern, const std::string& str) {
+//   Glob<char> glob(pattern);
+//   return glob.Exec(str);
+// }
 
-void PrintTokens(const std::string& str) {
-  Lexer<char> l(str);
-  std::vector<Token<char>> tokens = l.Scanner();
-  for (auto& token : tokens) {
-    std::cout << token << " ";
-  }
-  std::cout << "\n";
-}
+// bool TestGlob3(const std::wstring& pattern, const std::wstring& str) {
+//   Glob<wchar_t> glob(pattern);
+//   return glob.Exec(str);
+// }
+
+// void PrintTokens(const std::string& str) {
+//   Lexer<char> l(str);
+//   std::vector<Token<char>> tokens = l.Scanner();
+//   for (auto& token : tokens) {
+//     std::cout << token << " ";
+//   }
+//   std::cout << "\n";
+// }
 
 int main(int argc, char **argv) {
   // std::cout << "'te*', 'teste' -> " << GlobMatch("te*", "teste") << std::endl;
@@ -116,7 +123,7 @@ int main(int argc, char **argv) {
   // PrintAst("+(a)");
   // PrintAst("*-[0-9].jtl");
   // std::cout << "'te*t(x)', 'teste' -> " << TestGlob2("t(e[a-f])", "tes") << std::endl;
-  std::cout << "'te*t(x)', 'teste' -> " << TestGlob2("*([a-z])w", "tw") << std::endl;
+  // std::cout << "'te*t(x)', 'teste' -> " << TestGlob2("*([a-z])w", "tw") << std::endl;
   return 0;
 }
 
