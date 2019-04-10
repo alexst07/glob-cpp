@@ -79,7 +79,8 @@ class StateFail : public State<charT> {
     return false;
   }
 
-  std::tuple<size_t, size_t> Next(const String<charT>& str, size_t pos) override {
+  std::tuple<size_t, size_t> Next(const String<charT>& str,
+      size_t pos) override {
     return std::tuple<size_t, size_t>(0, ++pos);
   }
 };
@@ -235,7 +236,8 @@ class StateAny : public State<charT> {
     return true;
   }
 
-  std::tuple<size_t, size_t> Next(const String<charT>& str, size_t pos) override {
+  std::tuple<size_t, size_t> Next(const String<charT>& str,
+      size_t pos) override {
     // state any always match with any char
     return std::tuple<size_t, size_t>(GetNextStates()[0], pos + 1);
   }
@@ -255,7 +257,8 @@ class StateStar : public State<charT> {
     return true;
   }
 
-  std::tuple<size_t, size_t> Next(const String<charT>& str, size_t pos) override {
+  std::tuple<size_t, size_t> Next(const String<charT>& str,
+      size_t pos) override {
     // next state vector from StateStar has two elements, the element 0 points
     // to the same state, and the element points to next state if the
     // conditions is satisfied
@@ -343,7 +346,8 @@ class StateSet : public State<charT> {
     return SetCheck(str, pos);
   }
 
-  std::tuple<size_t, size_t> Next(const String<charT>& str, size_t pos) override {
+  std::tuple<size_t, size_t> Next(const String<charT>& str,
+      size_t pos) override {
     if (Check(str, pos)) {
       return std::tuple<size_t, size_t>(GetNextStates()[0], pos + 1);
     }
@@ -435,7 +439,8 @@ class StateGroup: public State<charT> {
     }
   }
 
-  std::tuple<size_t, size_t> Next(const String<charT>& str, size_t pos) override {
+  std::tuple<size_t, size_t> Next(const String<charT>& str,
+      size_t pos) override {
     // STATE 1 -> is the next state
     // STATE 0 -> is the same state
     switch (type_) {
@@ -627,8 +632,8 @@ class Token {
     return kind_ != kind;
   }
  private:
-  friend
-  std::ostream& operator<<(std::ostream& stream, const Token<charT>& token);
+  template<class charU> friend
+  std::ostream& operator<<(std::ostream& stream, const Token<charU>& token);
 
   TokenKind kind_;
   charT value_;
@@ -1144,7 +1149,7 @@ class Parser {
 
     Advance();
 
-    return AstNodePtr<charT>(new SetItemsNode(std::move(items)));
+    return AstNodePtr<charT>(new SetItemsNode<charT>(std::move(items)));
   }
 
   AstNodePtr<charT> ParserSet() {
@@ -1203,32 +1208,32 @@ class Parser {
   }
 
   AstNodePtr<charT> ParserGroup() {
-    GroupNode<charT>::GroupType type;
+    typename GroupNode<charT>::GroupType type;
     Token<charT>& tk = NextToken();
 
     switch (tk.Kind()) {
       case TokenKind::LPAREN:
-        type = GroupNode::GroupType::BASIC;
+        type = GroupNode<charT>::GroupType::BASIC;
         break;
 
       case TokenKind::QUESTLPAREN:
-        type = GroupNode::GroupType::ANY;
+        type = GroupNode<charT>::GroupType::ANY;
         break;
 
       case TokenKind::STARLPAREN:
-        type = GroupNode::GroupType::STAR;
+        type = GroupNode<charT>::GroupType::STAR;
         break;
 
       case TokenKind::PLUSLPAREN:
-        type = GroupNode::GroupType::PLUS;
+        type = GroupNode<charT>::GroupType::PLUS;
         break;
 
       case TokenKind::NEGLPAREN:
-        type = GroupNode::GroupType::NEG;
+        type = GroupNode<charT>::GroupType::NEG;
         break;
 
       case TokenKind::ATLPAREN:
-        type = GroupNode::GroupType::AT;
+        type = GroupNode<charT>::GroupType::AT;
         break;
 
       default:
@@ -1268,7 +1273,7 @@ class Parser {
       parts.push_back(ParserBasicGlob());
     }
 
-    return AstNodePtr(new ConcatNode<charT>(std::move(parts)));
+    return AstNodePtr<charT>(new ConcatNode<charT>(std::move(parts)));
   }
 
   AstNodePtr<charT> ParserUnion() {
@@ -1339,21 +1344,22 @@ class AstConsumer {
   AstConsumer() = default;
 
   void GenAutomata(AstNode<charT>* root_node, Automata<charT>& automata) {
-    AstNode<charT>* concat_node = static_cast<GlobNode*>(root_node)->GetConcat();
+    AstNode<charT>* concat_node = static_cast<GlobNode<charT>*>(root_node)
+        ->GetConcat();
     ExecConcat(concat_node, automata);
 
-    size_t match_state = automata.NewState<StateMatch>();
+    size_t match_state = automata.template NewState<StateMatch<charT>>();
     automata.GetState(preview_state_).AddNextState(match_state);
     automata.SetMatchState(match_state);
 
-    size_t fail_state = automata.NewState<StateFail>();
+    size_t fail_state = automata.template NewState<StateFail<charT>>();
     automata.SetFailState(fail_state);
   }
 
  private:
   void ExecConcat(AstNode<charT>* node, Automata<charT>& automata) {
-    ConcatNode* concat_node = static_cast<ConcatNode*>(node);
-    std::vector<AstNodePtr>& basic_globs = concat_node->GetBasicGlobs();
+    ConcatNode<charT>* concat_node = static_cast<ConcatNode<charT>*>(node);
+    std::vector<AstNodePtr<charT>>& basic_globs = concat_node->GetBasicGlobs();
 
     for (auto& basic_glob : basic_globs) {
       ExecBasicGlob(basic_glob.get(), automata);
@@ -1362,27 +1368,27 @@ class AstConsumer {
 
   void ExecBasicGlob(AstNode<charT>* node, Automata<charT>& automata) {
     switch (node->GetType()) {
-      case AstNode::Type::CHAR:
+      case AstNode<charT>::Type::CHAR:
         ExecChar(node, automata);
         break;
 
-      case AstNode::Type::ANY:
+      case AstNode<charT>::Type::ANY:
         ExecAny(node, automata);
         break;
 
-      case AstNode::Type::STAR:
+      case AstNode<charT>::Type::STAR:
         ExecStar(node, automata);
         break;
 
-      case AstNode::Type::POS_SET:
+      case AstNode<charT>::Type::POS_SET:
         ExecPositiveSet(node, automata);
         break;
 
-      case AstNode::Type::NEG_SET:
+      case AstNode<charT>::Type::NEG_SET:
         ExecNegativeSet(node, automata);
         break;
 
-      case AstNode::Type::GROUP:
+      case AstNode<charT>::Type::GROUP:
         ExecGroup(node, automata);
         break;
 
@@ -1392,35 +1398,40 @@ class AstConsumer {
   }
 
   void ExecChar(AstNode<charT>* node, Automata<charT>& automata) {
-    CharNode* char_node = static_cast<CharNode*>(node);
+    CharNode<charT>* char_node = static_cast<CharNode<charT>*>(node);
     char c = char_node->GetValue();
-    NewState<StateChar>(automata, c);
+    NewState<StateChar<charT>>(automata, c);
   }
 
   void ExecAny(AstNode<charT>* node, Automata<charT>& automata) {
-    NewState<StateAny>(automata);
+    NewState<StateAny<charT>>(automata);
   }
 
   void ExecStar(AstNode<charT>* node, Automata<charT>& automata) {
-    NewState<StateStar>(automata);
+    NewState<StateStar<charT>>(automata);
     automata.GetState(current_state_).AddNextState(current_state_);
   }
 
   void ExecPositiveSet(AstNode<charT>* node, Automata<charT>& automata) {
-    PositiveSetNode* pos_set_node = static_cast<PositiveSetNode*>(node);
+    PositiveSetNode<charT>* pos_set_node =
+        static_cast<PositiveSetNode<charT>*>(node);
+
     auto items = ProcessSetItems(pos_set_node->GetSet());
-    NewState<StateSet>(automata, std::move(items));
+    NewState<StateSet<charT>>(automata, std::move(items));
   }
 
   void ExecNegativeSet(AstNode<charT>* node, Automata<charT>& automata) {
-    NegativeSetNode* pos_set_node = static_cast<NegativeSetNode*>(node);
+    NegativeSetNode<charT>* pos_set_node =
+        static_cast<NegativeSetNode<charT>*>(node);
+
     auto items = ProcessSetItems(pos_set_node->GetSet());
-    NewState<StateSet>(automata, std::move(items), /*neg*/true);
+    NewState<StateSet<charT>>(automata, std::move(items), /*neg*/true);
   }
 
-  std::vector<std::unique_ptr<SetItem>> ProcessSetItems(AstNode<charT>* node) {
-    SetItemsNode* set_node = static_cast<SetItemsNode*>(node);
-    std::vector<std::unique_ptr<SetItem>> vec;
+  std::vector<std::unique_ptr<SetItem<charT>>> ProcessSetItems(
+      AstNode<charT>* node) {
+    SetItemsNode<charT>* set_node = static_cast<SetItemsNode<charT>*>(node);
+    std::vector<std::unique_ptr<SetItem<charT>>> vec;
     auto& items = set_node->GetItems();
     for (auto& item : items) {
       vec.push_back(ProcessSetItem(item.get()));
@@ -1429,74 +1440,82 @@ class AstConsumer {
     return vec;
   }
 
-  std::unique_ptr<SetItem> ProcessSetItem(AstNode<charT>* node) {
-    if (node->GetType() == AstNode::Type::CHAR) {
-      CharNode* char_node = static_cast<CharNode*>(node);
+  std::unique_ptr<SetItem<charT>> ProcessSetItem(AstNode<charT>* node) {
+    if (node->GetType() == AstNode<charT>::Type::CHAR) {
+      CharNode<charT>* char_node = static_cast<CharNode<charT>*>(node);
       char c = char_node->GetValue();
-      return std::unique_ptr<SetItem>(new SetItemChar(c));
-    } else if (node->GetType() == AstNode::Type::RANGE) {
-      RangeNode* range_node = static_cast<RangeNode*>(node);
-      CharNode* start_node = static_cast<CharNode*>(range_node->GetStart());
-      CharNode* end_node = static_cast<CharNode*>(range_node->GetEnd());
+      return std::unique_ptr<SetItem<charT>>(new SetItemChar<charT>(c));
+    } else if (node->GetType() == AstNode<charT>::Type::RANGE) {
+      RangeNode<charT>* range_node = static_cast<RangeNode<charT>*>(node);
+      CharNode<charT>* start_node = static_cast<CharNode<charT>*>(
+          range_node->GetStart());
+
+      CharNode<charT>* end_node = static_cast<CharNode<charT>*>(
+          range_node->GetEnd());
+
       char start_char = start_node->GetValue();
       char end_char = end_node->GetValue();
-      return std::unique_ptr<SetItem>(new SetItemRange(start_char, end_char));
+      return std::unique_ptr<SetItem<charT>>(new SetItemRange<charT>(start_char,
+          end_char));
     } else {
       throw Error("Not valid set item");
     }
   }
 
   void ExecGroup(AstNode<charT>* node, Automata<charT>& automata) {
-    GroupNode* group_node = static_cast<GroupNode*>(node);
+    GroupNode<charT>* group_node = static_cast<GroupNode<charT>*>(node);
     AstNode<charT>* union_node = group_node->GetGlob();
-    std::vector<std::unique_ptr<Automata>> automatas = ExecUnion(union_node);
+    std::vector<std::unique_ptr<Automata<charT>>> automatas =
+        ExecUnion(union_node);
 
-    StateGroup::Type state_group_type;
+    typename StateGroup<charT>::Type state_group_type;
     switch (group_node->GetGroupType()) {
-      case GroupNode::GroupType::BASIC:
-        state_group_type = StateGroup::Type::BASIC;
+      case GroupNode<charT>::GroupType::BASIC:
+        state_group_type = StateGroup<charT>::Type::BASIC;
         break;
 
-      case GroupNode::GroupType::ANY:
-        state_group_type = StateGroup::Type::ANY;
+      case GroupNode<charT>::GroupType::ANY:
+        state_group_type = StateGroup<charT>::Type::ANY;
         break;
 
-      case GroupNode::GroupType::STAR:
-        state_group_type = StateGroup::Type::STAR;
+      case GroupNode<charT>::GroupType::STAR:
+        state_group_type = StateGroup<charT>::Type::STAR;
         break;
 
-      case GroupNode::GroupType::PLUS:
-        state_group_type = StateGroup::Type::PLUS;
+      case GroupNode<charT>::GroupType::PLUS:
+        state_group_type = StateGroup<charT>::Type::PLUS;
         break;
 
-      case GroupNode::GroupType::AT:
-        state_group_type = StateGroup::Type::AT;
+      case GroupNode<charT>::GroupType::AT:
+        state_group_type = StateGroup<charT>::Type::AT;
         break;
 
-      case GroupNode::GroupType::NEG:
-        state_group_type = StateGroup::Type::NEG;
+      case GroupNode<charT>::GroupType::NEG:
+        state_group_type = StateGroup<charT>::Type::NEG;
         break;
     }
 
-    NewState<StateGroup>(automata, state_group_type, std::move(automatas));
+    NewState<StateGroup<charT>>(automata, state_group_type,
+        std::move(automatas));
     automata.GetState(current_state_).AddNextState(current_state_);
   }
 
-  std::vector<std::unique_ptr<Automata>> ExecUnion(AstNode<charT>* node) {
-    UnionNode* union_node = static_cast<UnionNode*>(node);
+  std::vector<std::unique_ptr<Automata<charT>>> ExecUnion(
+      AstNode<charT>* node) {
+    UnionNode<charT>* union_node = static_cast<UnionNode<charT>*>(node);
     auto& items = union_node->GetItems();
-    std::vector<std::unique_ptr<Automata>> vec_automatas;
+    std::vector<std::unique_ptr<Automata<charT>>> vec_automatas;
     for (auto& item : items) {
-      std::unique_ptr<Automata> automata_ptr(new Automata);
+      std::unique_ptr<Automata<charT>> automata_ptr(new Automata<charT>);
       AstConsumer ast_consumer;
       ast_consumer.ExecConcat(item.get(), *automata_ptr);
 
-      size_t match_state = automata_ptr->NewState<StateMatch>();
+      size_t match_state = automata_ptr->template NewState<StateMatch<charT>>();
       automata_ptr->GetState(ast_consumer.preview_state_)
           .AddNextState(match_state);
       automata_ptr->SetMatchState(match_state);
 
-      size_t fail_state = automata_ptr->NewState<StateFail>();
+      size_t fail_state = automata_ptr->template NewState<StateFail<charT>>();
       automata_ptr->SetFailState(fail_state);
 
       vec_automatas.push_back(std::move(automata_ptr));
@@ -1507,7 +1526,7 @@ class AstConsumer {
 
   template<class T, typename... Args>
   void NewState(Automata<charT>& automata, Args&&... args) {
-    current_state_ = automata.NewState<T>(std::forward<Args>(args)...);
+    current_state_ = automata.template NewState<T>(std::forward<Args>(args)...);
     if (preview_state_ >= 0) {
       automata.GetState(preview_state_).AddNextState(current_state_);
     }
@@ -1519,14 +1538,14 @@ class AstConsumer {
   size_t current_state_ = 0;
 };
 
-template<class chart>
+template<class charT>
 class Glob {
  public:
   Glob(const String<charT>& str) {
     Lexer<charT> l(str);
     std::vector<Token<charT>> tokens = l.Scanner();
     Parser<charT> p(std::move(tokens));
-    AstNodePtr ast_ptr = p.GenAst();
+    AstNodePtr<charT> ast_ptr = p.GenAst();
 
     AstConsumer<charT> ast_consumer;
     ast_consumer.GenAutomata(ast_ptr.get(), automata_);
@@ -1540,7 +1559,7 @@ class Glob {
   }
 
  private:
-  Automata automata_;
+  Automata<charT> automata_;
 };
 
 template<class charT>
@@ -1556,20 +1575,20 @@ class SimpleGlob {
       char c = pattern[pos];
       switch (c) {
         case '?': {
-          current_state = automato_.NewState<StateAny>();
+          current_state = automato_.template NewState<StateAny<charT>>();
           ++pos;
           break;
         }
 
         case '*': {
-          current_state = automato_.NewState<StateStar>();
+          current_state = automato_.template NewState<StateStar<charT>>();
           automato_.GetState(current_state).AddNextState(current_state);
           ++pos;
           break;
         }
 
         default: {
-          current_state = automato_.NewState<StateChar>(c);
+          current_state = automato_.template NewState<StateChar<charT>>(c);
           ++pos;
           break;
         }
@@ -1581,11 +1600,11 @@ class SimpleGlob {
       preview_state = current_state;
     }
 
-    size_t match_state = automato_.NewState<StateMatch>();
+    size_t match_state = automato_.template NewState<StateMatch<charT>>();
     automato_.GetState(preview_state).AddNextState(match_state);
     automato_.SetMatchState(match_state);
 
-    size_t fail_state = automato_.NewState<StateFail>();
+    size_t fail_state = automato_.template NewState<StateFail<charT>>();
     automato_.SetFailState(fail_state);
   }
 

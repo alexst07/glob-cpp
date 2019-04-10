@@ -4,21 +4,22 @@
 #include<iostream>
 #include "glob.h"
 
-class PrintTraversal: public AstVisitor {
+template<class charT>
+class PrintTraversal: public AstVisitor<charT> {
  public:
-  void Visit(AstNode *node) {
+  void Visit(AstNode<charT> *node) {
     level_ = 0;
     after_simple_ = false;
     node->Accept(this);
   }
 
-  void VisitCharNode(CharNode* char_node) override {
+  void VisitCharNode(CharNode<charT>* char_node) override {
     char c = char_node->GetValue();
     std::cout << "[" << c << "]";
     after_simple_ = true;
   }
 
-  void VisitRangeNode(RangeNode* node) override {
+  void VisitRangeNode(RangeNode<charT>* node) override {
     after_simple_ = false;
     NewLine(false);
     Level();
@@ -31,7 +32,7 @@ class PrintTraversal: public AstVisitor {
     after_simple_ = false;
   }
 
-  void VisitSetItemsNode(SetItemsNode* node) override {
+  void VisitSetItemsNode(SetItemsNode<charT>* node) override {
     after_simple_ = false;
     auto& vec = node->GetItems();
     for (auto& item_node : vec) {
@@ -40,7 +41,7 @@ class PrintTraversal: public AstVisitor {
     after_simple_ = false;
   }
 
-  void VisitPositiveSetNode(PositiveSetNode* node) override {
+  void VisitPositiveSetNode(PositiveSetNode<charT>* node) override {
     NewLine(false);
     after_simple_ = false;
     Level();
@@ -55,7 +56,7 @@ class PrintTraversal: public AstVisitor {
     after_simple_ = false;
   }
 
-  void VisitNegativeSetNode(NegativeSetNode* node) override {
+  void VisitNegativeSetNode(NegativeSetNode<charT>* node) override {
     NewLine(false);
     after_simple_ = false;
     Level();
@@ -71,17 +72,17 @@ class PrintTraversal: public AstVisitor {
     after_simple_ = false;
   }
 
-  void VisitStarNode(StarNode* node) override {
+  void VisitStarNode(StarNode<charT>* node) override {
     std::cout << "[star]";
     after_simple_ = true;
   }
 
-  void VisitAnyNode(AnyNode* node) override {
+  void VisitAnyNode(AnyNode<charT>* node) override {
     std::cout << "[any]";
     after_simple_ = true;
   }
 
-  void VisitGroupNode(GroupNode* node) override {
+  void VisitGroupNode(GroupNode<charT>* node) override {
     NewLine(false);
     after_simple_ = false;
     Level();
@@ -95,7 +96,7 @@ class PrintTraversal: public AstVisitor {
     NewLine();
   }
 
-  void VisitConcatNode(ConcatNode* node) override {
+  void VisitConcatNode(ConcatNode<charT>* node) override {
     NewLine( );
     after_simple_ = false;
     auto& vec = node->GetBasicGlobs();
@@ -115,7 +116,7 @@ class PrintTraversal: public AstVisitor {
     after_simple_ = false;
   }
 
-  void VisitUnionNode(UnionNode* node) override {
+  void VisitUnionNode(UnionNode<charT>* node) override {
     after_simple_ = false;
     auto& vec = node->GetItems();
     Level();
@@ -139,7 +140,7 @@ class PrintTraversal: public AstVisitor {
     after_simple_ = false;
   }
 
-  void VisitGlobNode(GlobNode* node) override {
+  void VisitGlobNode(GlobNode<charT>* node) override {
     after_simple_ = false;
     ++level_;
     Level();
@@ -178,12 +179,13 @@ class PrintTraversal: public AstVisitor {
   int level_;
 };
 
-void PrintAst(const std::string& str) {
-  Lexer l(str);
-  std::vector<Token> tokens = l.Scanner();
-  Parser p(std::move(tokens));
-  AstNodePtr ast_ptr = p.GenAst();
-  PrintTraversal visitor;
+template<class charT>
+void PrintAst(const String<charT>& str) {
+  Lexer<charT> l(str);
+  std::vector<Token<charT>> tokens = l.Scanner();
+  Parser<charT> p(std::move(tokens));
+  AstNodePtr<charT> ast_ptr = p.GenAst();
+  PrintTraversal<charT> visitor;
   visitor.Visit(ast_ptr.get());
   std::cout << "\n";
 }

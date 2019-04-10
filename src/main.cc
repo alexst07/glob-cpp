@@ -53,7 +53,7 @@ bool GlobMatch(const std::string& pattern, const std::string& str) {
 }
 
 bool TestGlob(const std::string& pattern, const std::string& str) {
-  SimpleGlob glob;
+  SimpleGlob<char> glob;
   glob.Parser(pattern);
   bool r;
   size_t pos;
@@ -63,13 +63,13 @@ bool TestGlob(const std::string& pattern, const std::string& str) {
 }
 
 bool TestGlob2(const std::string& pattern, const std::string& str) {
-  Glob glob(pattern);
+  Glob<char> glob(pattern);
   return glob.Exec(str);
 }
 
 void PrintTokens(const std::string& str) {
-  Lexer l(str);
-  std::vector<Token> tokens = l.Scanner();
+  Lexer<char> l(str);
+  std::vector<Token<char>> tokens = l.Scanner();
   for (auto& token : tokens) {
     std::cout << token << " ";
   }
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
   // PrintAst("+(a)");
   // PrintAst("*-[0-9].jtl");
   // std::cout << "'te*t(x)', 'teste' -> " << TestGlob2("t(e[a-f])", "tes") << std::endl;
-  std::cout << "'te*t(x)', 'teste' -> " << TestGlob2("*([!a-z])w", "tw") << std::endl;
+  std::cout << "'te*t(x)', 'teste' -> " << TestGlob2("*([a-z])w", "tw") << std::endl;
   return 0;
 }
 
