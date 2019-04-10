@@ -407,121 +407,138 @@ class StateGroup: public State {
     switch (type_) {
       case Type::BASIC:
       case Type::AT: {
-        bool r;
-        size_t new_pos;
-        std::tie(r, new_pos) = BasicCheck(str, pos);
-        if (r) {
-          return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
-        }
-
-        return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
+        return NextBasic(str, pos);
         break;
       }
 
       case Type::ANY: {
-        bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
-        if (res) {
-          return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-        }
-
-        bool r;
-        size_t new_pos;
-        std::tie(r, new_pos) = BasicCheck(str, pos);
-        if (r) {
-          return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
-        }
-
-        if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
-          return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-        }
-
-        return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+        return NextAny(str, pos);
         break;
       }
 
       case Type::STAR: {
-        bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
-        if (res) {
-          return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-        }
-
-        bool r;
-        size_t new_pos;
-        std::tie(r, new_pos) = BasicCheck(str, pos);
-        if (r) {
-          if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH
-              && new_pos == str.length()) {
-            return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
-          } else {
-            return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos);
-          }
-        }
-
-        if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
-          return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-        }
-
-        return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+        return NextStar(str, pos);
         break;
       }
 
       case Type::PLUS: {
-        // case where the next state matches and the group already matched
-        // one time -> goes to next state
-        bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
-        if (res && match_one_) {
-          return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-        }
-
-        bool r;
-        size_t new_pos;
-        std::tie(r, new_pos) = BasicCheck(str, pos);
-        if (r) {
-          match_one_ = true;
-
-          // if it matches and the string reached at the end, and the next
-          // state is the match state, goes to next state to avoid state mistake
-          if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH
-              && new_pos == str.length()) {
-            return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
-          } else {
-            return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos);
-          }
-        }
-
-        if (match_one_) {
-          if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
-            return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-          }
-
-          bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
-          // if the next state is satisfied goes to next state
-          if (res) {
-            return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-          }
-
-          return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-        } else {
-          return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
-        }
+        return NextPlus(str, pos);
         break;
       }
 
       case Type::NEG: {
-        bool r;
-        size_t new_pos;
-        std::tie(r, new_pos) = BasicCheck(str, pos);
-        if (r) {
-          return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
-        }
-
-        return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+        return NextNeg(str, pos);
         break;
       }
+    }
+  }
 
-      default:
-        return BasicCheck(str, pos);
-        break;
+  std::tuple<size_t, size_t> NextNeg(const std::string& str, size_t pos) {
+    bool r;
+    size_t new_pos;
+    std::tie(r, new_pos) = BasicCheck(str, pos);
+    if (r) {
+      return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
+    }
+
+    return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+  }
+
+  std::tuple<size_t, size_t> NextBasic(const std::string& str, size_t pos) {
+    bool r;
+    size_t new_pos;
+    std::tie(r, new_pos) = BasicCheck(str, pos);
+    if (r) {
+      return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
+    }
+
+    return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
+  }
+
+  std::tuple<size_t, size_t> NextAny(const std::string& str, size_t pos) {
+    bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
+    if (res) {
+      return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+    }
+
+    bool r;
+    size_t new_pos;
+    std::tie(r, new_pos) = BasicCheck(str, pos);
+    if (r) {
+      return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
+    }
+
+    if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
+      return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+    }
+
+    return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+  }
+
+  std::tuple<size_t, size_t> NextStar(const std::string& str, size_t pos) {
+    bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
+    if (res) {
+      return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+    }
+
+    bool r;
+    size_t new_pos;
+    std::tie(r, new_pos) = BasicCheck(str, pos);
+    if (r) {
+      if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH
+          && new_pos == str.length()) {
+        return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
+      } else {
+        return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos);
+      }
+    }
+
+    if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
+      return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+    }
+
+    return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+  }
+
+  std::tuple<size_t, size_t> NextPlus(const std::string& str, size_t pos) {
+    // case where the next state matches and the group already matched
+    // one time -> goes to next state
+    bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
+    if (res && match_one_) {
+      return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+    }
+
+    bool r;
+    size_t new_pos;
+    std::tie(r, new_pos) = BasicCheck(str, pos);
+    if (r) {
+      match_one_ = true;
+
+      // if it matches and the string reached at the end, and the next
+      // state is the match state, goes to next state to avoid state mistake
+      if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH
+          && new_pos == str.length()) {
+        return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
+      } else {
+        return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos);
+      }
+    }
+
+    if (match_one_) {
+      if (GetAutomata().GetState(GetNextStates()[1]).Type()
+          == StateType::MATCH) {
+        return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+      }
+
+      bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
+      // if the next state is satisfied goes to next state
+      if (res) {
+        return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+      }
+
+      return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+    } else {
+      return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
     }
   }
 
@@ -676,7 +693,7 @@ class Lexer {
 
         case '[': {
           Advance();
-          if (c_ == '^') {
+          if (c_ == '!') {
             tokens.push_back(Select(TokenKind::NEGLBRACKET));
             Advance();
           } else {
@@ -737,7 +754,6 @@ class Lexer {
     bool b = c == '?' ||
              c == '*' ||
              c == '+' ||
-             c == '^' ||
              c == '(' ||
              c == ')' ||
              c == '[' ||
