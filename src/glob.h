@@ -5,6 +5,8 @@
 #include <tuple>
 #include <vector>
 #include <memory>
+#include <boost/filesystem.hpp>
+#include <boost/range/iterator_range.hpp>
 
 namespace glob {
 
@@ -1562,7 +1564,7 @@ class ExtendedGlob {
     return *this;
   }
 
-  bool Exec(const String<charT>& str) {
+  bool Exec(const String<charT>& str) const {
     bool r;
     std::tie(r, std::ignore) = automata_.Exec(str);
     return r;
@@ -1631,7 +1633,7 @@ class SimpleGlob {
     automata_.SetFailState(fail_state);
   }
 
-  bool Exec(const String<charT>& str) {
+  bool Exec(const String<charT>& str) const {
     bool r;
     std::tie(r, std::ignore) = automata_.Exec(str);
     return r;
@@ -1663,21 +1665,41 @@ class BasicGlob {
   }
 
  private:
-  bool Exec(const String<charT>& str) {
+  bool Exec(const String<charT>& str) const {
     return glob_.Exec(str);
   }
+
+  template<class charU, class globU>
+  friend bool glob_match(const String<charU>& str,
+      const BasicGlob<charU, globU>& glob);
+
+  template<class charU, class globU>
+  friend bool glob_match(const charU* str, const BasicGlob<charU, globU>& glob);
 
   globT glob_;
 };
 
 template<class charT, class globT=extended_glob<charT>>
-BasicGlob<charT> Compile(const String<charT>& pattern) {
-  BasicGlob<charT, globT> glob(pattern);
-  return glob;
+bool glob_match(const String<charT>& str, const BasicGlob<charT, globT>& glob) {
+  return glob.Exec(str);
 }
 
 template<class charT, class globT=extended_glob<charT>>
-bool GlobMatch(const String<charT>& pattern, const BasicGlob<charT, globT>&) {
+bool glob_match(const charT* str, const BasicGlob<charT, globT>& glob) {
+  return glob.Exec(str);
+}
+
+template<class charT, class globT=extended_glob<charT>>
+using basic_glob = BasicGlob<charT, globT>;
+
+using glob = basic_glob<char, extended_glob<char>>;
+
+using wglob = basic_glob<wchar_t, extended_glob<wchar_t>>;
+
+namespace fs = boost::filesystem;
+
+void AuxListFiles(const fs::path& path, std::vector<fs::path>& vec_files,
+    size_t level) {
 
 }
 

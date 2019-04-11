@@ -3,8 +3,6 @@
 #include "glob.h"
 #include "traversal.h"
 
-using namespace glob;
-
 bool GlobMatch(const std::string& pattern, const std::string& str) {
   size_t px = 0;
   size_t nx = 0;
@@ -124,6 +122,26 @@ int main(int argc, char **argv) {
   // PrintAst("*-[0-9].jtl");
   // std::cout << "'te*t(x)', 'teste' -> " << TestGlob2("t(e[a-f])", "tes") << std::endl;
   // std::cout << "'te*t(x)', 'teste' -> " << TestGlob2("*([a-z])w", "tw") << std::endl;
+  // glob::glob g("*.pdf");
+  // std::cout << "match: " << glob::glob_match("file.pdf", g) << "\n";
+
+  namespace fs = boost::filesystem;
+
+  // path p(argc>1? argv[1] : ".");
+
+  // if(is_directory(p)) {
+  //   std::cout << p << " is a directory containing:\n";
+
+  //   for(auto& entry : boost::make_iterator_range(directory_iterator(p), {}))
+  //       std::cout << entry << "\n";
+  // }
+
+  auto path = fs::path("/home/alex/books");
+  for (auto it = path.begin(); it != path.end(); it++ ) {
+    std::cout << *it << "\n";
+  }
+
+
   return 0;
 }
 
