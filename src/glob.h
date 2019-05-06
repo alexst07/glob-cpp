@@ -7,6 +7,7 @@
 #include <memory>
 #include <boost/filesystem.hpp>
 #include <boost/range/iterator_range.hpp>
+#include <boost/process.hpp>
 
 namespace glob {
 
@@ -1695,13 +1696,6 @@ using basic_glob = BasicGlob<charT, globT>;
 using glob = basic_glob<char, extended_glob<char>>;
 
 using wglob = basic_glob<wchar_t, extended_glob<wchar_t>>;
-
-namespace fs = boost::filesystem;
-
-void AuxListFiles(const fs::path& path, std::vector<fs::path>& vec_files,
-    size_t level) {
-
-}
 
 } // namespace glob
 

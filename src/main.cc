@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include "glob.h"
+#include "file-glob.h"
 #include "traversal.h"
 
 bool GlobMatch(const std::string& pattern, const std::string& str) {
@@ -136,11 +137,24 @@ int main(int argc, char **argv) {
   //       std::cout << entry << "\n";
   // }
 
-  auto path = fs::path("/home/alex/books");
-  for (auto it = path.begin(); it != path.end(); it++ ) {
-    std::cout << *it << "\n";
-  }
+  // auto path = fs::path("/home/**/books");
+  // for (auto it = path.begin(); it != path.end(); it++ ) {
+  //   std::cout << *it << "\n";
+  // }
 
+  // fs::path path;
+  // path /= "~/teste";
+  // path /= "teste2";
+
+  // std::cout << path << "\n";
+
+  fs::path p{argv[1]};
+  glob::FileGlog<char> fglob{argv[1]};
+  std::vector<fs::path> paths = fglob.Exec();
+
+  for (auto& path : paths) {
+    std::cout << path << "\n";
+  }
 
   return 0;
 }
