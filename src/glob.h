@@ -53,8 +53,8 @@ class State {
 
   StateType Type() const {
     return type_;
-
   }
+
   const Automata<charT>& GetAutomata() const {
     return states_;
   }
@@ -67,10 +67,24 @@ class State {
     return next_states_;
   }
 
+  const String<charT>& MatchedStr() {
+    return matched_str_;
+  }
+
+ protected:
+  void SetMatchedStr(const String<charT>& str) {
+    matched_str_ = str;
+  }
+
+  void SetMatchedStr(charT c) {
+    matched_str_ = String<charT>{1, c};
+  }
+
  private:
   StateType type_;
   Automata<charT>& states_;
   std::vector<size_t> next_states_;
+  String<charT> matched_str_;
 };
 
 template<class charT>
@@ -217,6 +231,7 @@ class StateChar : public State<charT> {
   std::tuple<size_t, size_t> Next(const String<charT>& str,
       size_t pos) override {
     if (c_ == str[pos]) {
+      this->SetMatchedStr(c_);
       return std::tuple<size_t, size_t>(GetNextStates()[0], pos + 1);
     }
 
@@ -242,6 +257,7 @@ class StateAny : public State<charT> {
 
   std::tuple<size_t, size_t> Next(const String<charT>& str,
       size_t pos) override {
+    this->SetMatchedStr(str[pos]);
     // state any always match with any char
     return std::tuple<size_t, size_t>(GetNextStates()[0], pos + 1);
   }
@@ -269,6 +285,7 @@ class StateStar : public State<charT> {
     if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
       // this case occurs when star is in the end of the glob, so the pos is
       // the end of the string, because all string is consumed
+      this->SetMatchedStr(str.substr(pos));
       return std::tuple<size_t, size_t>(GetNextStates()[1], str.length());
     }
 
@@ -279,6 +296,7 @@ class StateStar : public State<charT> {
     }
 
     // while the next state check is false, the string is consumed by star state
+    this->SetMatchedStr(this->MatchedStr() + str[pos]);
     return std::tuple<size_t, size_t>(GetNextStates()[0], pos + 1);
   }
 };
@@ -353,6 +371,7 @@ class StateSet : public State<charT> {
   std::tuple<size_t, size_t> Next(const String<charT>& str,
       size_t pos) override {
     if (Check(str, pos)) {
+      this->SetMatchedStr(str[pos]);
       return std::tuple<size_t, size_t>(GetNextStates()[0], pos + 1);
     }
 
@@ -481,6 +500,7 @@ class StateGroup: public State<charT> {
     size_t new_pos;
     std::tie(r, new_pos) = BasicCheck(str, pos);
     if (r) {
+      this->SetMatchedStr(str.substr(pos, new_pos));
       return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
     }
 
@@ -492,6 +512,7 @@ class StateGroup: public State<charT> {
     size_t new_pos;
     std::tie(r, new_pos) = BasicCheck(str, pos);
     if (r) {
+      this->SetMatchedStr(str.substr(pos, new_pos));
       return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
     }
 
@@ -508,6 +529,7 @@ class StateGroup: public State<charT> {
     size_t new_pos;
     std::tie(r, new_pos) = BasicCheck(str, pos);
     if (r) {
+      this->SetMatchedStr(str.substr(pos, new_pos));
       return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
     }
 
@@ -528,6 +550,7 @@ class StateGroup: public State<charT> {
     size_t new_pos;
     std::tie(r, new_pos) = BasicCheck(str, pos);
     if (r) {
+      this->SetMatchedStr(str.substr(pos, new_pos));
       if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH
           && new_pos == str.length()) {
         return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
@@ -556,6 +579,7 @@ class StateGroup: public State<charT> {
     std::tie(r, new_pos) = BasicCheck(str, pos);
     if (r) {
       match_one_ = true;
+      this->SetMatchedStr(str.substr(pos, new_pos));
 
       // if it matches and the string reached at the end, and the next
       // state is the match state, goes to next state to avoid state mistake
