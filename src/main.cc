@@ -148,14 +148,22 @@ int main(int argc, char **argv) {
 
   // std::cout << path << "\n";
 
-  fs::path p{argv[1]};
-  glob::FileGlog<char> fglob{argv[1]};
-  std::vector<fs::path> paths = fglob.Exec();
+  // fs::path p{argv[1]};
+  // glob::FileGlog<char> fglob{argv[1]};
+  // std::vector<fs::path> paths = fglob.Exec();
 
-  for (auto& path : paths) {
-    std::cout << path << "\n";
+  // for (auto& path : paths) {
+  //   std::cout << path << "\n";
+  // }
+
+  glob::glob g("+([a-z0-9]).*");
+  std::cout << "match: " << glob::glob_match("file1.pdf", g) << "\n";
+
+  auto vec = g.GetAutomata().GetMatchedStrings();
+
+  for (auto& item : vec) {
+    std::cout << "str: " << item << "\n";
   }
-
   return 0;
 }
 

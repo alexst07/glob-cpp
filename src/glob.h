@@ -77,7 +77,7 @@ class State {
   }
 
   void SetMatchedStr(charT c) {
-    matched_str_ = String<charT>{1, c};
+    matched_str_ = c;
   }
 
  private:
@@ -194,6 +194,21 @@ class Automata {
       // match state
       return std::tuple<bool, size_t>(state_pos == match_state_, str_pos);
     }
+  }
+
+  std::vector<String<charT>> GetMatchedStrings() const {
+    std::vector<String<charT>> vec;
+
+    for (auto& state : states_) {
+      if (state->Type() == StateType::MULT ||
+          state->Type() == StateType::QUESTION ||
+          state->Type() == StateType::GROUP ||
+          state->Type() == StateType::SET) {
+        vec.push_back(state->MatchedStr());
+      }
+    }
+
+    return vec;
   }
 
   template<class T, typename... Args>
@@ -500,7 +515,7 @@ class StateGroup: public State<charT> {
     size_t new_pos;
     std::tie(r, new_pos) = BasicCheck(str, pos);
     if (r) {
-      this->SetMatchedStr(str.substr(pos, new_pos));
+      this->SetMatchedStr(this->MatchedStr() + str.substr(pos, new_pos - pos));
       return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
     }
 
@@ -512,7 +527,7 @@ class StateGroup: public State<charT> {
     size_t new_pos;
     std::tie(r, new_pos) = BasicCheck(str, pos);
     if (r) {
-      this->SetMatchedStr(str.substr(pos, new_pos));
+      this->SetMatchedStr(this->MatchedStr() + str.substr(pos, new_pos - pos));
       return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
     }
 
@@ -529,7 +544,7 @@ class StateGroup: public State<charT> {
     size_t new_pos;
     std::tie(r, new_pos) = BasicCheck(str, pos);
     if (r) {
-      this->SetMatchedStr(str.substr(pos, new_pos));
+      this->SetMatchedStr(this->MatchedStr() + str.substr(pos, new_pos - pos));
       return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
     }
 
@@ -550,7 +565,7 @@ class StateGroup: public State<charT> {
     size_t new_pos;
     std::tie(r, new_pos) = BasicCheck(str, pos);
     if (r) {
-      this->SetMatchedStr(str.substr(pos, new_pos));
+      this->SetMatchedStr(this->MatchedStr() + str.substr(pos, new_pos - pos));
       if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH
           && new_pos == str.length()) {
         return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
@@ -579,7 +594,7 @@ class StateGroup: public State<charT> {
     std::tie(r, new_pos) = BasicCheck(str, pos);
     if (r) {
       match_one_ = true;
-      this->SetMatchedStr(str.substr(pos, new_pos));
+      this->SetMatchedStr(this->MatchedStr() + str.substr(pos, new_pos - pos));
 
       // if it matches and the string reached at the end, and the next
       // state is the match state, goes to next state to avoid state mistake
@@ -1595,6 +1610,10 @@ class ExtendedGlob {
     return r;
   }
 
+  Automata<charT>& GetAutomata() {
+    return automata_;
+  }
+
  private:
   Automata<charT> automata_;
 };
@@ -1664,6 +1683,10 @@ class SimpleGlob {
     return r;
   }
 
+  Automata<charT>& GetAutomata() const {
+    return automata_;
+  }
+
  private:
   Automata<charT> automata_;
 };
@@ -1689,6 +1712,10 @@ class BasicGlob {
     return *this;
   }
 
+  Automata<charT>& GetAutomata() {
+    return glob_.GetAutomata();
+  }
+
  private:
   bool Exec(const String<charT>& str) const {
     return glob_.Exec(str);
@@ -1704,6 +1731,68 @@ class BasicGlob {
   globT glob_;
 };
 
+template<class charT>
+class MatchResults {
+ public:
+  using const_iterator = typename std::vector<String<charT>>::const_iterator;
+
+  MatchResults() = default;
+
+  MatchResults(const MatchResults& m): results_{m.results_} {}
+
+  MatchResults(MatchResults&& m): results_{std::move(m.results_)} {}
+
+  MatchResults& operator=(const MatchResults& m) {
+    results_ = m.results_;
+  }
+
+  MatchResults& operator=(MatchResults&& m) {
+    results_ = std::move(m.results_);
+  }
+
+  bool empty() const {
+    return results_.empty();
+  }
+
+  size_t size() const {
+    return results_.size();
+  }
+
+  const_iterator begin() const noexcept {
+    return results_.begin();
+  }
+
+  const_iterator end() const noexcept {
+    return results_.end();
+  }
+
+  const_iterator cbegin() const noexcept {
+    return results_.cbegin();
+  }
+
+  const_iterator cend() const noexcept {
+    return results_.cend();
+  }
+
+  String<charT>& operator[] (size_t n) const {
+    return results_[n];
+  }
+
+ private:
+  void SetResults(std::vector<String<charT>>&& results) {
+    results_ = std::move(results_);
+  }
+
+  template<class charU, class globU>
+  friend bool glob_match(const String<charU>& str,
+      const BasicGlob<charU, globU>& glob);
+
+  template<class charU, class globU>
+  friend bool glob_match(const charU* str, const BasicGlob<charU, globU>& glob);
+
+  std::vector<String<charT>> results_;
+};
+
 template<class charT, class globT=extended_glob<charT>>
 bool glob_match(const String<charT>& str, const BasicGlob<charT, globT>& glob) {
   return glob.Exec(str);
@@ -1712,6 +1801,22 @@ bool glob_match(const String<charT>& str, const BasicGlob<charT, globT>& glob) {
 template<class charT, class globT=extended_glob<charT>>
 bool glob_match(const charT* str, const BasicGlob<charT, globT>& glob) {
   return glob.Exec(str);
+}
+
+template<class charT, class globT=extended_glob<charT>>
+bool glob_match(const String<charT>& str, MatchResults<charT>& res,
+    const BasicGlob<charT, globT>& glob) {
+  bool r = glob.Exec(str);
+  res.SetResults(glob.GetAutomata().GetMatchedStrings());
+  return r;
+}
+
+template<class charT, class globT=extended_glob<charT>>
+bool glob_match(const charT* str, MatchResults<charT>& res,
+    const BasicGlob<charT, globT>& glob) {
+  bool r = glob.Exec(str);
+  res.SetResults(glob.GetAutomata().GetMatchedStrings());
+  return r;
 }
 
 template<class charT, class globT=extended_glob<charT>>
