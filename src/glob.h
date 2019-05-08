@@ -1610,7 +1610,7 @@ class ExtendedGlob {
     return r;
   }
 
-  Automata<charT>& GetAutomata() {
+  const Automata<charT>& GetAutomata() const {
     return automata_;
   }
 
@@ -1683,7 +1683,7 @@ class SimpleGlob {
     return r;
   }
 
-  Automata<charT>& GetAutomata() const {
+  const Automata<charT>& GetAutomata() const {
     return automata_;
   }
 
@@ -1696,6 +1696,9 @@ using extended_glob = ExtendedGlob<charT>;
 
 template<class charT>
 using no_extended_glob = SimpleGlob<charT>;
+
+template<class charT>
+class MatchResults;
 
 template<class charT, class globT=extended_glob<charT>>
 class BasicGlob {
@@ -1712,7 +1715,7 @@ class BasicGlob {
     return *this;
   }
 
-  Automata<charT>& GetAutomata() {
+  const Automata<charT>& GetAutomata() const {
     return glob_.GetAutomata();
   }
 
@@ -1727,6 +1730,14 @@ class BasicGlob {
 
   template<class charU, class globU>
   friend bool glob_match(const charU* str, const BasicGlob<charU, globU>& glob);
+
+  template<class charU, class globU>
+  friend bool glob_match(const String<charU>& str, MatchResults<charU>& res,
+      const BasicGlob<charU, globU>& glob);
+
+  template<class charU, class globU>
+  friend bool glob_match(const charU* str, MatchResults<charU>& res,
+    const BasicGlob<charU, globU>& glob);
 
   globT glob_;
 };
@@ -1780,7 +1791,7 @@ class MatchResults {
 
  private:
   void SetResults(std::vector<String<charT>>&& results) {
-    results_ = std::move(results_);
+    results_ = std::move(results);
   }
 
   template<class charU, class globU>
@@ -1789,6 +1800,14 @@ class MatchResults {
 
   template<class charU, class globU>
   friend bool glob_match(const charU* str, const BasicGlob<charU, globU>& glob);
+
+  template<class charU, class globU>
+  friend bool glob_match(const String<charU>& str, MatchResults<charU>& res,
+      const BasicGlob<charU, globU>& glob);
+
+  template<class charU, class globU>
+  friend bool glob_match(const charU* str, MatchResults<charU>& res,
+    const BasicGlob<charU, globU>& glob);
 
   std::vector<String<charT>> results_;
 };
