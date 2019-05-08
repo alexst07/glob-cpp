@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <gtest/gtest.h>
 #include "glob.h"
 #include "file-glob.h"
 #include "traversal.h"
@@ -82,7 +83,7 @@ bool GlobMatch(const std::string& pattern, const std::string& str) {
 //   std::cout << "\n";
 // }
 
-int main(int argc, char **argv) {
+int test(int argc, char **argv) {
   // std::cout << "'te*', 'teste' -> " << GlobMatch("te*", "teste") << std::endl;
   // std::cout << "'tea*', 'teste' -> " << GlobMatch("tea*", "teste") << std::endl;
   // std::cout << "'test?', 'teste' -> " << GlobMatch("test?", "teste") << std::endl;
@@ -172,3 +173,83 @@ int main(int argc, char **argv) {
   return 0;
 }
 
+
+TEST(GlobString, star) {
+  glob::glob g("*.pdf");
+  ASSERT_TRUE(glob_match("test.pdf", g));
+  ASSERT_TRUE(glob_match(".pdf", g));
+  ASSERT_FALSE(glob_match("test.txt", g));
+  ASSERT_FALSE(glob_match("test.pdff", g));
+}
+
+TEST(GlobString, any) {
+  glob::glob g("?abc?xy?");
+  ASSERT_TRUE(glob_match("qabcqxyq", g));
+  ASSERT_TRUE(glob_match("aabcixyp", g));
+  ASSERT_FALSE(glob_match("?abc?xy", g));
+  ASSERT_FALSE(glob_match("abcxxyx", g));
+}
+
+TEST(GlobString, any_star) {
+  glob::glob g("?a*.txt");
+  ASSERT_TRUE(glob_match("xasefs.txt", g));
+  ASSERT_TRUE(glob_match("batest.txt", g));
+  ASSERT_FALSE(glob_match("atest.txt", g));
+  ASSERT_FALSE(glob_match("batesttxt", g));
+}
+
+TEST(GlobString, set1) {
+  glob::glob g("*_[0-9].txt");
+  ASSERT_TRUE(glob_match("file_1.txt", g));
+  ASSERT_TRUE(glob_match("file_5.txt", g));
+  ASSERT_TRUE(glob_match("_5.txt", g));
+  ASSERT_FALSE(glob_match("file_11.txt", g));
+  ASSERT_FALSE(glob_match("file_.txt", g));
+}
+
+TEST(GlobString, set2) {
+  glob::glob g("*_[a-zA-Z0-9].txt");
+  ASSERT_TRUE(glob_match("file_a.txt", g));
+  ASSERT_TRUE(glob_match("file_Z.txt", g));
+  ASSERT_TRUE(glob_match("_8.txt", g));
+  ASSERT_FALSE(glob_match("file_11.txt", g));
+  ASSERT_FALSE(glob_match("file_.txt", g));
+}
+
+TEST(GlobString, set3) {
+  glob::glob g("*_[abc].txt");
+  ASSERT_TRUE(glob_match("file_a.txt", g));
+  ASSERT_TRUE(glob_match("file_b.txt", g));
+  ASSERT_TRUE(glob_match("_c.txt", g));
+  ASSERT_FALSE(glob_match("file_d.txt", g));
+  ASSERT_FALSE(glob_match("file_z.txt", g));
+}
+
+TEST(GlobString, set4) {
+  glob::glob g("*_[a-zABC0-9].txt");
+  ASSERT_TRUE(glob_match("file_a.txt", g));
+  ASSERT_TRUE(glob_match("file_B.txt", g));
+  ASSERT_TRUE(glob_match("_3.txt", g));
+  ASSERT_FALSE(glob_match("file_D.txt", g));
+  ASSERT_FALSE(glob_match("file_E.txt", g));
+}
+
+TEST(GlobString, group_plus) {
+  glob::glob g("[A-Z]+([a-z0-9]).txt");
+  ASSERT_TRUE(glob_match("File1.txt", g));
+  ASSERT_TRUE(glob_match("File12.txt", g));
+  ASSERT_TRUE(glob_match("F3.txt", g));
+  ASSERT_FALSE(glob_match("file.txt", g));
+  ASSERT_FALSE(glob_match("F.txt", g));
+  ASSERT_FALSE(glob_match("File12.pdf", g));
+}
+
+TEST(GlobString, group_star) {
+  glob::glob g("*([A-Z])+([a-z0-9]).txt");
+  ASSERT_TRUE(glob_match("FILE1.txt", g));
+  ASSERT_TRUE(glob_match("file.txt", g));
+  ASSERT_TRUE(glob_match("F3.txt", g));
+  ASSERT_FALSE(glob_match(".txt", g));
+  ASSERT_FALSE(glob_match("_file.txt", g));
+  ASSERT_FALSE(glob_match("F.pdf", g));
+}

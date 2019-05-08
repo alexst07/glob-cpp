@@ -1,12 +1,17 @@
 cmake_minimum_required(VERSION 2.8)
 project(glob)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
+
+option(BUILD_UNIT_TESTS OFF)
+
 find_package(Boost REQUIRED COMPONENTS filesystem)
 include_directories(${Boost_INCLUDE_DIRS})
 
-file(GLOB SRC ${CMAKE_SOURCE_DIR}/src/*.cc)
-add_executable(glob ${SRC})
-target_link_libraries(glob Boost::filesystem)
-
-install(TARGETS glob RUNTIME DESTINATION bin)
-
+if (BUILD_UNIT_TESTS)
+  enable_testing()
+  include(googletest)
+  include_directories(SYSTEM ${googletest_INCLUDE_DIRS}
+                      ${googlemock_INCLUDE_DIRS})
+  add_subdirectory(tests)
+endif ()

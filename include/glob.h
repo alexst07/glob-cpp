@@ -414,10 +414,17 @@ class StateGroup: public State<charT> {
 
   StateGroup(Automata<charT>& states, Type type,
       std::vector<std::unique_ptr<Automata<charT>>>&& automatas)
-    : State<charT>(StateType::QUESTION, states)
+    : State<charT>(StateType::GROUP, states)
     , type_{type}
     , automatas_{std::move(automatas)}
-    , match_one_{false} {}
+    , match_one_{false} {
+      std::cout << "Created StateGroup\n";
+    }
+
+  StateGroup(const StateGroup&) = delete;
+  StateGroup(StateGroup&&) = delete;
+  StateGroup& operator=(const StateGroup&) = delete;
+  StateGroup& operator=(StateGroup&&) = delete;
 
   std::tuple<bool, size_t> BasicCheck(const String<charT>& str,
       size_t pos) const {
@@ -586,6 +593,7 @@ class StateGroup: public State<charT> {
     // one time -> goes to next state
     bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
     if (res && match_one_) {
+      std::cout << "group plus :" << str << "\n";
       return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
     }
 
@@ -594,6 +602,7 @@ class StateGroup: public State<charT> {
     std::tie(r, new_pos) = BasicCheck(str, pos);
     if (r) {
       match_one_ = true;
+      std::cout << "group plus match_one_ true:" << str << "\n";
       this->SetMatchedStr(this->MatchedStr() + str.substr(pos, new_pos - pos));
 
       // if it matches and the string reached at the end, and the next
