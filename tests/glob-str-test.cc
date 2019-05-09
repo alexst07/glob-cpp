@@ -263,3 +263,24 @@ TEST(GlobString, group_any) {
   ASSERT_FALSE(glob_match("FILE12.txt", g));
   ASSERT_FALSE(glob_match("FF.pdf", g));
 }
+
+TEST(GlobString, group_at) {
+  glob::glob g("*([A-Z])@([a-z0-9]).txt");
+  ASSERT_TRUE(glob_match("FILE1.txt", g));
+  ASSERT_TRUE(glob_match("FILEx.txt", g));
+  ASSERT_TRUE(glob_match("F3.txt", g));
+  ASSERT_FALSE(glob_match(".txt", g));
+  ASSERT_FALSE(glob_match("FILE.txt", g));
+  ASSERT_FALSE(glob_match("FF.pdf", g));
+}
+
+TEST(GlobString, group_union) {
+  glob::glob g("*([a-zA-Z])*([0-9]).(txt|pdf)");
+  ASSERT_TRUE(glob_match("FILE1.txt", g));
+  ASSERT_TRUE(glob_match("FILE1.pdf", g));
+  ASSERT_TRUE(glob_match("FILE.pdf", g));
+  ASSERT_TRUE(glob_match("F3.txt", g));
+  ASSERT_TRUE(glob_match(".txt", g));
+  ASSERT_FALSE(glob_match("FILE.jpg", g));
+  ASSERT_FALSE(glob_match("FF.sdf", g));
+}
