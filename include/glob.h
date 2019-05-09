@@ -469,12 +469,16 @@ class StateGroup: public State<charT> {
       }
 
       case Type::ANY: {
-        return true;
+        bool r;
+        std::tie(r, std::ignore) = BasicCheck(str, pos);
+        return r;
         break;
       }
 
       case Type::STAR: {
-        return true;
+        bool r;
+        std::tie(r, std::ignore) = BasicCheck(str, pos);
+        return r;
         break;
       }
 
@@ -556,11 +560,6 @@ class StateGroup: public State<charT> {
   }
 
   std::tuple<size_t, size_t> NextAny(const String<charT>& str, size_t pos) {
-    bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
-    if (res) {
-      return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-    }
-
     bool r;
     size_t new_pos;
     std::tie(r, new_pos) = BasicCheck(str, pos);
@@ -569,19 +568,18 @@ class StateGroup: public State<charT> {
       return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
     }
 
-    if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
-      return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-    }
+    // bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
+    // if (res) {
+    //   return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+    // }
 
+    // if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
+    //   return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+    // }
     return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
   }
 
   std::tuple<size_t, size_t> NextStar(const String<charT>& str, size_t pos) {
-    bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
-    if (res) {
-      return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-    }
-
     bool r;
     size_t new_pos;
     std::tie(r, new_pos) = BasicCheck(str, pos);
@@ -595,21 +593,19 @@ class StateGroup: public State<charT> {
       }
     }
 
-    if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
-      return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-    }
+    // bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
+    // if (res) {
+    //   return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+    // }
+
+    // if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
+    //   return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+    // }
 
     return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
   }
 
   std::tuple<size_t, size_t> NextPlus(const String<charT>& str, size_t pos) {
-    // case where the next state matches and the group already matched
-    // one time -> goes to next state
-    bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
-    if (res && match_one_) {
-      return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-    }
-
     bool r;
     size_t new_pos;
     std::tie(r, new_pos) = BasicCheck(str, pos);
@@ -625,6 +621,13 @@ class StateGroup: public State<charT> {
       } else {
         return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos);
       }
+    }
+
+    // case where the next state matches and the group already matched
+    // one time -> goes to next state
+    bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
+    if (res && match_one_) {
+      return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
     }
 
     if (match_one_) {

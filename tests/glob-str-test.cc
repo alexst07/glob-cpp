@@ -257,9 +257,9 @@ TEST(GlobString, group_star) {
 TEST(GlobString, group_any) {
   glob::glob g("*([A-Z])?([a-z0-9]).txt");
   ASSERT_TRUE(glob_match("FILE1.txt", g));
-  ASSERT_TRUE(glob_match("file.txt", g));
+  ASSERT_TRUE(glob_match("FILE.txt", g));
   ASSERT_TRUE(glob_match("F3.txt", g));
-  ASSERT_FALSE(glob_match(".txt", g));
+  ASSERT_TRUE(glob_match(".txt", g));
   ASSERT_FALSE(glob_match("FILE12.txt", g));
   ASSERT_FALSE(glob_match("FF.pdf", g));
 }
