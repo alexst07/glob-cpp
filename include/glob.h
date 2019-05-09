@@ -461,27 +461,9 @@ class StateGroup: public State<charT> {
   bool Check(const String<charT>& str, size_t pos) override {
     switch (type_) {
       case Type::BASIC:
-      case Type::AT: {
-        bool r;
-        std::tie(r, std::ignore) = BasicCheck(str, pos);
-        return r;
-        break;
-      }
-
-      case Type::ANY: {
-        bool r;
-        std::tie(r, std::ignore) = BasicCheck(str, pos);
-        return r;
-        break;
-      }
-
-      case Type::STAR: {
-        bool r;
-        std::tie(r, std::ignore) = BasicCheck(str, pos);
-        return r;
-        break;
-      }
-
+      case Type::AT:
+      case Type::ANY:
+      case Type::STAR:
       case Type::PLUS: {
         bool r;
         std::tie(r, std::ignore) = BasicCheck(str, pos);
@@ -568,14 +550,6 @@ class StateGroup: public State<charT> {
       return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
     }
 
-    // bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
-    // if (res) {
-    //   return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-    // }
-
-    // if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
-    //   return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-    // }
     return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
   }
 
@@ -592,15 +566,6 @@ class StateGroup: public State<charT> {
         return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos);
       }
     }
-
-    // bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
-    // if (res) {
-    //   return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-    // }
-
-    // if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
-    //   return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-    // }
 
     return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
   }
@@ -631,17 +596,6 @@ class StateGroup: public State<charT> {
     }
 
     if (match_one_) {
-      if (GetAutomata().GetState(GetNextStates()[1]).Type()
-          == StateType::MATCH) {
-        return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-      }
-
-      bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
-      // if the next state is satisfied goes to next state
-      if (res) {
-        return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-      }
-
       return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
     } else {
       return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
