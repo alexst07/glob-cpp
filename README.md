@@ -1,4 +1,7 @@
 # glob-cpp
+------------
+Glob CPP is still in development, and more testing needs to be done.
+------------
 
 Glob CPP is a header only library based on STL regular expression to perform glob operation on string, or on filesystem.
 
