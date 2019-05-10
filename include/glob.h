@@ -1825,6 +1825,10 @@ using glob = basic_glob<char, extended_glob<char>>;
 
 using wglob = basic_glob<wchar_t, extended_glob<wchar_t>>;
 
+using cmatch = MatchResults<char>;
+
+using wmatch = MatchResults<wchar_t>;
+
 } // namespace glob
 
 #endif  // GLOB_CPP_H

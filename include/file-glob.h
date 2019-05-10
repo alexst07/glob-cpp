@@ -395,6 +395,10 @@ class FileGlog {
   fs::path path_;
 };
 
+using path_match = PathMatch<char>;
+using wpath_match = PathMatch<wchar_t>;
+using file_glob = FileGlog<char>;
+using wfile_glob = FileGlog<wchar_t>;
 }
 
 #endif
