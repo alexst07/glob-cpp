@@ -2,7 +2,7 @@
 #include <string>
 #include <gtest/gtest.h>
 #include "glob.h"
-#include "file-glob.h"
+#include "glob-cpp/file-glob.h"
 #include "traversal.h"
 
 bool GlobMatch(const std::string& pattern, const std::string& str) {

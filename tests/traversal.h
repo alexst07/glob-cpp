@@ -2,7 +2,7 @@
 #define GLOB_CPP_TRAVERSAL_H
 
 #include<iostream>
-#include "glob.h"
+#include "glob-cpp/glob.h"
 
 namespace glob {
 
