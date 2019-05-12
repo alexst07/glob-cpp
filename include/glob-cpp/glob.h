@@ -1455,7 +1455,7 @@ class AstConsumer {
     std::vector<std::unique_ptr<SetItem<charT>>> vec;
     auto& items = set_node->GetItems();
     for (auto& item : items) {
-      vec.push_back(ProcessSetItem(item.get()));
+      vec.push_back(std::move(ProcessSetItem(item.get())));
     }
 
     return vec;

@@ -3,6 +3,10 @@ project(glob)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
+set(CMAKE_CXX_FLAGS "-Wall -Wextra")
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
 option(BUILD_UNIT_TESTS OFF)
 
 find_package(Boost REQUIRED COMPONENTS filesystem)
