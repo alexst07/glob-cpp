@@ -97,7 +97,7 @@ class StateFail : public State<charT> {
   StateFail(Automata<charT>& states)
     : State<charT>(StateType::FAIL, states){}
 
-  bool Check(const String<charT>& str, size_t) override {
+  bool Check(const String<charT>&, size_t) override {
     return false;
   }
 
@@ -112,7 +112,7 @@ class StateMatch : public State<charT> {
   StateMatch(Automata<charT>& states)
     : State<charT>(StateType::MATCH, states){}
 
-  bool Check(const String<charT>& str, size_t) override {
+  bool Check(const String<charT>&, size_t) override {
     return true;
   }
 
@@ -280,7 +280,7 @@ class StateAny : public State<charT> {
   StateAny(Automata<charT>& states)
     : State<charT>(StateType::QUESTION, states){}
 
-  bool Check(const String<charT>& str, size_t) override {
+  bool Check(const String<charT>&, size_t) override {
     // as it match any char, it is always trye
     return true;
   }
