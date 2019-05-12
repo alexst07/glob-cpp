@@ -97,12 +97,11 @@ class StateFail : public State<charT> {
   StateFail(Automata<charT>& states)
     : State<charT>(StateType::FAIL, states){}
 
-  bool Check(const String<charT>& str, size_t pos) override {
+  bool Check(const String<charT>& str, size_t) override {
     return false;
   }
 
-  std::tuple<size_t, size_t> Next(const String<charT>& str,
-      size_t pos) override {
+  std::tuple<size_t, size_t> Next(const String<charT>&, size_t pos) override {
     return std::tuple<size_t, size_t>(0, ++pos);
   }
 };
@@ -113,12 +112,11 @@ class StateMatch : public State<charT> {
   StateMatch(Automata<charT>& states)
     : State<charT>(StateType::MATCH, states){}
 
-  bool Check(const String<charT>& str, size_t pos) override {
+  bool Check(const String<charT>& str, size_t) override {
     return true;
   }
 
-  std::tuple<size_t, size_t> Next(const String<charT>& str,
-      size_t pos) override {
+  std::tuple<size_t, size_t> Next(const String<charT>&, size_t pos) override {
     return std::tuple<size_t, size_t>(0, ++pos);
   }
 };
@@ -282,7 +280,7 @@ class StateAny : public State<charT> {
   StateAny(Automata<charT>& states)
     : State<charT>(StateType::QUESTION, states){}
 
-  bool Check(const String<charT>& str, size_t pos) override {
+  bool Check(const String<charT>& str, size_t) override {
     // as it match any char, it is always trye
     return true;
   }
@@ -304,7 +302,7 @@ class StateStar : public State<charT> {
   StateStar(Automata<charT>& states)
     : State<charT>(StateType::MULT, states){}
 
-  bool Check(const String<charT>& str, size_t pos) override {
+  bool Check(const String<charT>& str, size_t) override {
     // as it match any char, it is always trye
     return true;
   }
@@ -837,7 +835,7 @@ class Lexer {
 };
 
 
-#define AST_NODE_LIST(V)  \
+#define GLOB_AST_NODE_LIST(V)  \
   V(CharNode)             \
   V(RangeNode)            \
   V(SetItemsNode)         \
@@ -855,7 +853,7 @@ class AstVisitor;
 
 // declare all classes used for nodes
 #define DECLARE_TYPE_CLASS(type) template<class charT> class type;
-  AST_NODE_LIST(DECLARE_TYPE_CLASS)
+  GLOB_AST_NODE_LIST(DECLARE_TYPE_CLASS)
 #undef DECLARE_TYPE_CLASS
 
 template<class charT>
@@ -902,7 +900,7 @@ class AstVisitor {
 // define all visitor methods for the nodes
 #define DECLARE_VIRTUAL_FUNC(type) \
   virtual void Visit##type(type<charT>* /*node*/) {}
-  AST_NODE_LIST(DECLARE_VIRTUAL_FUNC)
+  GLOB_AST_NODE_LIST(DECLARE_VIRTUAL_FUNC)
 #undef DECLARE_VIRTUAL_FUNC
 };
 
@@ -1426,11 +1424,11 @@ class AstConsumer {
     NewState<StateChar<charT>>(automata, c);
   }
 
-  void ExecAny(AstNode<charT>* node, Automata<charT>& automata) {
+  void ExecAny(AstNode<charT>*, Automata<charT>& automata) {
     NewState<StateAny<charT>>(automata);
   }
 
-  void ExecStar(AstNode<charT>* node, Automata<charT>& automata) {
+  void ExecStar(AstNode<charT>*, Automata<charT>& automata) {
     NewState<StateStar<charT>>(automata);
     automata.GetState(current_state_).AddNextState(current_state_);
   }
@@ -1735,10 +1733,14 @@ class MatchResults {
 
   MatchResults& operator=(const MatchResults& m) {
     results_ = m.results_;
+
+    return *this;
   }
 
   MatchResults& operator=(MatchResults&& m) {
     results_ = std::move(m.results_);
+
+    return *this;
   }
 
   bool empty() const {

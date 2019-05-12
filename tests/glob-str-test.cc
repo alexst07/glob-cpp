@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
 #include <gtest/gtest.h>
-#include "glob.h"
+#include "glob-cpp/glob.h"
 #include "glob-cpp/file-glob.h"
 #include "traversal.h"
 
