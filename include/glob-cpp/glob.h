@@ -302,7 +302,7 @@ class StateStar : public State<charT> {
   StateStar(Automata<charT>& states)
     : State<charT>(StateType::MULT, states){}
 
-  bool Check(const String<charT>& str, size_t) override {
+  bool Check(const String<charT>&, size_t) override {
     // as it match any char, it is always trye
     return true;
   }
