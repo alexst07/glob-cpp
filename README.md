@@ -27,7 +27,7 @@ Verify is a given string match with glob expression.
 
 int main () {
   glob::glob g("*.pdf");
-  bool r = glob_match("test.pdf", g);
+  bool r = glob::glob_match("test.pdf", g);
   std::cout << "match: " << r?"yes":"no" << "\n";
   return 0;
 }
@@ -41,7 +41,7 @@ Print the matches found on the target sequence of characters after a glob matchi
 int main () {
   glob::glob g("*.pdf");
   glob::cmatch m;
-  if (glob_match("test.pdf", m, g)) {
+  if (glob::glob_match("test.pdf", m, g)) {
     for (auto& token : m) {
       std::cout << "sub string: " << token << "\n";
     }
