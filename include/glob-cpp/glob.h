@@ -487,8 +487,9 @@ class StateGroup: public State<charT> {
     // STATE 1 -> is the next state
     // STATE 0 -> is the same state
     switch (type_) {
-      case Type::BASIC:
-      case Type::AT: {
+      // case Type::BASIC:
+      // case Type::AT:
+      default: {
         return NextBasic(str, pos);
         break;
       }
