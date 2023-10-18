@@ -5,9 +5,6 @@
 #include <tuple>
 #include <vector>
 #include <memory>
-#include <boost/filesystem.hpp>
-#include <boost/range/iterator_range.hpp>
-#include <boost/process.hpp>
 
 namespace glob {
 
