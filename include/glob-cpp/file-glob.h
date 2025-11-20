@@ -2,10 +2,8 @@
 #define FILE_GLOB_CPP_H
 
 #include <iostream>
+#include <cstdlib>
 #include "glob.h"
-#include <boost/filesystem.hpp>
-#include <boost/range/iterator_range.hpp>
-#include <boost/process.hpp>
 
 namespace glob {
 
@@ -33,15 +31,11 @@ class PathMatch {
   PathMatch& operator=(const PathMatch& pm) {
     path_ = pm.path_;
     match_res_ = pm.match_res_;
-
-    return *this;
   }
 
   PathMatch& operator=(PathMatch&& pm) {
     path_ = std::move(pm.path_);
     match_res_ = std::move(pm.match_res_);
-
-    return *this;
   }
 
   const fs::path path() const {
@@ -68,6 +62,7 @@ class FileGlog {
         vec_glob_path.push_back(it->string());
       }
 
+      size_t level = 0;
       std::vector<PathMatch<charT>> vec_files;
       if (IsRootDir(vec_glob_path[0])) {
         return HandleRootDir(vec_glob_path);
@@ -115,11 +110,13 @@ class FileGlog {
 
   std::vector<PathMatch<charT>> HandleHomeDir(
       const std::vector<String<charT>>& vec_glob_path) {
-    namespace bp = boost::process;
-
     std::vector<PathMatch<charT>> vec_ret;
-    bp::environment env = boost::this_process::environment();
-    fs::path p{env["HOME"].to_string()};
+    const char* home = std::getenv("HOME");
+    if (!home) {
+      // HOME not set, return empty
+      return vec_ret;
+    }
+    fs::path p{home};
 
     if (vec_glob_path.size() < 2) {
       return std::vector<PathMatch<charT>>{PathMatch<charT>{std::move(p),
@@ -210,7 +207,7 @@ class FileGlog {
   std::vector<PathMatch<charT>> RecursiveGlobDir(
       const std::vector<String<charT>>& vec_glob_path,
       const fs::path& real_path,
-      size_t level) {
+      int level) {
     std::vector<PathMatch<charT>> vec_ret;
     fs::path p = real_path;
     if (level >= vec_glob_path.size()) {
@@ -275,7 +272,7 @@ class FileGlog {
   std::vector<PathMatch<charT>> TwoStarsGlobDir(
       const std::vector<String<charT>>& vec_glob_path,
       const fs::path& real_path,
-      size_t level) {
+      int level) {
     fs::recursive_directory_iterator end;
     std::vector<PathMatch<charT>> vec_paths;
 
@@ -288,7 +285,7 @@ class FileGlog {
 
   bool MatchGlobDir(const std::vector<String<charT>>& vec_glob_path,
       const fs::path& base_path, const fs::path& real_path,
-      size_t level, std::vector<PathMatch<charT>>& vec_res) {
+      int level, std::vector<PathMatch<charT>>& vec_res) {
     std::vector<String<charT>> vec_path;
     std::vector<String<charT>> vec_base_path;
 
