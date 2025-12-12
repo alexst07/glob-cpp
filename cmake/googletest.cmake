@@ -14,30 +14,38 @@
 # ==============================================================================
 include (ExternalProject)
 
-set(googletest_INCLUDE_DIRS ${CMAKE_CURRENT_BINARY_DIR}/googletest/src/googletest/googletest/include)
-set(googlemock_INCLUDE_DIRS ${CMAKE_CURRENT_BINARY_DIR}/googletest/src/googletest/googlemock/include)
+get_filename_component(GOOGLETEST_BINARY_DIR "${CMAKE_BINARY_DIR}/googletest" ABSOLUTE)
+set(googletest_INCLUDE_DIRS ${GOOGLETEST_BINARY_DIR}/src/googletest/googletest/include)
+set(googlemock_INCLUDE_DIRS ${GOOGLETEST_BINARY_DIR}/src/googletest/googlemock/include)
 set(googletest_VERSION 1.8.0)
 set(googletest_URL https://github.com/google/googletest/archive/release-${googletest_VERSION}.zip)
-set(googletest_BUILD ${CMAKE_CURRENT_BINARY_DIR}/googletest/)
+set(googletest_BUILD ${GOOGLETEST_BINARY_DIR}/)
 
 if(WIN32)
   if(${CMAKE_GENERATOR} MATCHES "Visual Studio.*")
     set(googletest_MAIN_STATIC_LIBRARIES
-        ${CMAKE_CURRENT_BINARY_DIR}/googletest/src/googletest/googletest/$(Configuration)/gtest_main.lib)
+        ${GOOGLETEST_BINARY_DIR}/src/googletest/googletest/$(Configuration)/gtest_main.lib)
     set(googletest_STATIC_LIBRARIES
-        ${CMAKE_CURRENT_BINARY_DIR}/googletest/src/googletest/googletest/$(Configuration)/gtest.lib)
+        ${GOOGLETEST_BINARY_DIR}/src/googletest/googletest/$(Configuration)/gtest.lib)
   else()
     set(googletest_MAIN_STATIC_LIBRARIES
-        ${CMAKE_CURRENT_BINARY_DIR}/googletest/src/googletest/googletest/gtest_main.lib)
+        ${GOOGLETEST_BINARY_DIR}/src/googletest/googletest/gtest_main.lib)
     set(googletest_STATIC_LIBRARIES
-        ${CMAKE_CURRENT_BINARY_DIR}/googletest/src/googletest/googletest/gtest.lib)
+        ${GOOGLETEST_BINARY_DIR}/src/googletest/googletest/gtest.lib)
   endif()
 else()
-  set(googletest_MAIN_STATIC_LIBRARIES
-      ${CMAKE_CURRENT_BINARY_DIR}/googletest/src/googletest/googlemock/gtest/libgtest_main.so)
-  set(googletest_STATIC_LIBRARIES
-      ${CMAKE_CURRENT_BINARY_DIR}/googletest/src/googletest/googlemock/gtest/libgtest.so
-      ${CMAKE_CURRENT_BINARY_DIR}/googletest/src/googletest/googlemock/libgmock.so)
+  if(APPLE)
+    set(LIB_EXT ".dylib")
+  else()
+    set(LIB_EXT ".so")
+  endif()
+  get_filename_component(GTEST_MAIN_LIB "${GOOGLETEST_BINARY_DIR}/src/googletest/googlemock/gtest/libgtest_main${LIB_EXT}" ABSOLUTE)
+  get_filename_component(GTEST_LIB "${GOOGLETEST_BINARY_DIR}/src/googletest/googlemock/gtest/libgtest${LIB_EXT}" ABSOLUTE)
+  get_filename_component(GMOCK_LIB "${GOOGLETEST_BINARY_DIR}/src/googletest/googlemock/libgmock${LIB_EXT}" ABSOLUTE)
+  get_filename_component(GMOCK_MAIN_LIB "${GOOGLETEST_BINARY_DIR}/src/googletest/googlemock/libgmock_main${LIB_EXT}" ABSOLUTE)
+  set(googletest_MAIN_STATIC_LIBRARIES ${GTEST_MAIN_LIB})
+  set(googletest_STATIC_LIBRARIES ${GTEST_LIB} ${GMOCK_LIB} ${GMOCK_MAIN_LIB})
+  set(googletest_LIB_EXT ${LIB_EXT})
 endif()
 
 ExternalProject_Add(googletest

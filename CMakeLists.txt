@@ -10,6 +10,11 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 option(BUILD_UNIT_TESTS OFF)
 option(BUILD_EXAMPLES OFF)
 
+# Prefer Homebrew Boost on macOS to avoid architecture mismatches
+if(APPLE)
+  set(BOOST_ROOT "/opt/homebrew/opt/boost" CACHE PATH "Boost root directory")
+endif()
+
 find_package(Boost REQUIRED COMPONENTS filesystem)
 
 add_library(${PROJECT_NAME} INTERFACE)
