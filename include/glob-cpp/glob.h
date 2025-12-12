@@ -218,6 +218,19 @@ class Automata {
       std::tie(state_pos, str_pos) = states_[state_pos]->Next(str, str_pos);
     }
 
+    // If we've consumed the entire string but haven't reached match or fail state,
+    // check if we're at a star state that can transition to MATCH (for patterns ending with *)
+    if (str_pos == str.length() && state_pos != fail_state_ && state_pos != match_state_) {
+      const State<charT>& current_state = *states_[state_pos];
+      if (current_state.Type() == StateType::MULT) {
+        // Check if this star state has MATCH as its next state (index 1)
+        const auto& next_states = current_state.GetNextStates();
+        if (next_states.size() > 1 && states_[next_states[1]]->Type() == StateType::MATCH) {
+          state_pos = next_states[1];
+        }
+      }
+    }
+
     // if comp_end is true it matches only if the automata reached the end of
     // the string
     if (comp_end) {

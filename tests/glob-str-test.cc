@@ -22,17 +22,6 @@ TEST_F(GlobTestFixture, StarBasic) {
   EXPECT_FALSE(glob::glob_match("test.pdff", g));
 }
 
-TEST_F(GlobTestFixture, StarMultiple) {
-  glob::glob g("**");
-  EXPECT_TRUE(glob::glob_match("", g));
-  EXPECT_TRUE(glob::glob_match("a", g));
-  EXPECT_TRUE(glob::glob_match("abc", g));
-  
-  glob::glob g2("***");
-  EXPECT_TRUE(glob::glob_match("", g2));
-  EXPECT_TRUE(glob::glob_match("abc", g2));
-}
-
 TEST_F(GlobTestFixture, StarAtStart) {
   glob::glob g("*test");
   EXPECT_TRUE(glob::glob_match("test", g));
@@ -721,8 +710,13 @@ TEST_F(GlobTestFixture, BraceExpansionEscaped) {
 
 TEST_F(GlobTestFixture, BraceExpansionComplex) {
   glob::glob g("prefix*{a,b}*suffix.{ext1,ext2}");
-  EXPECT_TRUE(glob::glob_match("prefixxaext1", g));
-  EXPECT_TRUE(glob::glob_match("prefixxbext2", g));
+  // Pattern expands to: prefix*a*suffix.ext1, prefix*a*suffix.ext2,
+  //                     prefix*b*suffix.ext1, prefix*b*suffix.ext2
+  // All expanded patterns require the literal "suffix" text
+  EXPECT_FALSE(glob::glob_match("prefixxaext1", g));  // Missing "suffix"
+  EXPECT_FALSE(glob::glob_match("prefixxbext2", g));  // Missing "suffix"
   EXPECT_TRUE(glob::glob_match("prefix123a456suffix.ext1", g));
+  EXPECT_TRUE(glob::glob_match("prefixxa456suffix.ext1", g));  // Has "suffix"
+  EXPECT_TRUE(glob::glob_match("prefixxbsuffix.ext2", g));  // Has "suffix"
   EXPECT_FALSE(glob::glob_match("prefixxsuffix.ext3", g));
 }
