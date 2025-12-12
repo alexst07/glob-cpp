@@ -458,7 +458,7 @@ TEST_F(GlobTestFixture, ComplexPattern) {
   glob::glob g("*([a-z])+([0-9])*(.txt|.pdf|.jpg)");
   EXPECT_TRUE(glob::glob_match("file123.txt", g));
   EXPECT_TRUE(glob::glob_match("abc456.pdf", g));
-  EXPECT_FALSE(glob::glob_match("123.txt", g));
+  EXPECT_TRUE(glob::glob_match("123.txt", g)); // Shell: *([a-z]) allows zero letters
 }
 
 TEST_F(GlobTestFixture, ZeroLengthMatch) {
@@ -594,4 +594,12 @@ TEST_F(GlobTestFixture, QuestionStarCombination) {
   EXPECT_TRUE(glob::glob_match("test1file", g));
   EXPECT_TRUE(glob::glob_match("test123file", g));
   EXPECT_FALSE(glob::glob_match("testfile", g));
+}
+
+TEST_F(GlobTestFixture, DoubleAsteriskPattern) {
+  glob::glob g("https://**.google.com");
+  EXPECT_TRUE(glob::glob_match("https://foo.bar.google.com", g));
+  EXPECT_FALSE(glob::glob_match("https://google.com", g)); // Shell: ** in middle requires at least one character
+  EXPECT_TRUE(glob::glob_match("https://a.google.com", g));
+  EXPECT_TRUE(glob::glob_match("https://a.b.c.google.com", g));
 }
