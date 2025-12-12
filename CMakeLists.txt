@@ -8,6 +8,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 option(BUILD_UNIT_TESTS OFF)
+option(BUILD_EXAMPLES OFF)
 
 find_package(Boost REQUIRED COMPONENTS filesystem)
 
@@ -20,5 +21,9 @@ if (BUILD_UNIT_TESTS)
   enable_testing()
   include(googletest)
   add_subdirectory(tests)
+endif ()
+
+if (BUILD_EXAMPLES)
+  add_subdirectory(examples)
 endif ()
 
