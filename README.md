@@ -11,7 +11,7 @@ A powerful, header-only C++ library for glob pattern matching on strings and fil
 - **Brace Expansion**: `{a,b,c}` for shell-style pattern expansion
 - **Nested Patterns**: Support for nested braces and groups
 - **Escape Sequences**: `\*`, `\?`, `\{`, `\}` to match literal characters
-- **File System Globbing**: Recursive directory traversal with `**` patterns
+- **File System Globbing**: Recursive directory traversal
 - **Match Extraction**: Capture matched substrings from patterns
 - **Wide Character Support**: `wglob` and `wmatch` for wide strings
 
@@ -40,7 +40,6 @@ int main() {
 |---------|-------------|----------------|
 | `*` | Matches zero or more characters | `""`, `"a"`, `"abc"`, `"any string"` |
 | `?` | Matches exactly one character | `"a"`, `"1"`, `"Z"` |
-| `**` | Multiple stars (same as `*`) | Same as `*` |
 
 **Examples:**
 ```cpp
@@ -195,16 +194,18 @@ for (const auto& result : results) {
 
 ### Recursive Directory Search
 
-Use `**` to search recursively:
+The file globbing API supports recursive directory traversal. Patterns are matched against file paths:
 
 ```cpp
-// Find all .txt files in all subdirectories
+// Find all .txt files recursively
 glob::file_glob fglob("**/*.txt");
 std::vector<glob::path_match> results = fglob.Exec();
 
 // Find files matching pattern in specific directory
 glob::file_glob fglob2("src/**/*.{h,hpp}");
 ```
+
+Note: In file globbing, `**` is treated as a path component for recursive traversal, but in string matching patterns, multiple stars (`**`, `***`, etc.) are equivalent to a single `*`.
 
 ### Wide Character Support
 
