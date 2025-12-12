@@ -213,15 +213,6 @@ test_glob "*.pdf" "test.txt" "false" "StarBasic: *.pdf does not match test.txt"
 test_glob "*.pdf" "test.pdff" "false" "StarBasic: *.pdf does not match test.pdff"
 echo ""
 
-# Test: StarMultiple
-echo "Test: StarMultiple"
-test_glob "**" "" "true" "StarMultiple: ** matches empty"
-test_glob "**" "a" "true" "StarMultiple: ** matches a"
-test_glob "**" "abc" "true" "StarMultiple: ** matches abc"
-test_glob "***" "" "true" "StarMultiple: *** matches empty"
-test_glob "***" "abc" "true" "StarMultiple: *** matches abc"
-echo ""
-
 # Test: StarAtStart
 echo "Test: StarAtStart"
 test_glob "*test" "test" "true" "StarAtStart: *test matches test"
@@ -463,28 +454,6 @@ test_glob "*([a-z])+([0-9]).(txt|pdf)" "file.txt" "false" "GroupComplex: *([a-z]
 test_glob "*([a-z])+([0-9]).(txt|pdf)" "file.jpg" "false" "GroupComplex: *([a-z])+([0-9]).(txt|pdf) does not match file.jpg"
 echo ""
 
-# Test: PatternAllWildcards
-echo "Test: PatternAllWildcards"
-test_glob "***" "" "true" "PatternAllWildcards: *** matches empty"
-test_glob "***" "a" "true" "PatternAllWildcards: *** matches a"
-test_glob "***" "abc" "true" "PatternAllWildcards: *** matches abc"
-echo ""
-
-# Test: ComplexPattern
-echo "Test: ComplexPattern"
-test_glob "*([a-z])+([0-9])*(.txt|.pdf|.jpg)" "file123.txt" "true" "ComplexPattern: *([a-z])+([0-9])*(.txt|.pdf|.jpg) matches file123.txt"
-test_glob "*([a-z])+([0-9])*(.txt|.pdf|.jpg)" "abc456.pdf" "true" "ComplexPattern: *([a-z])+([0-9])*(.txt|.pdf|.jpg) matches abc456.pdf"
-test_glob "*([a-z])+([0-9])*(.txt|.pdf|.jpg)" "123.txt" "true" "ComplexPattern: *([a-z])+([0-9])*(.txt|.pdf|.jpg) matches 123.txt (shell: *([a-z]) allows zero letters)"
-echo ""
-
-# Test: DoubleAsteriskPattern
-echo "Test: DoubleAsteriskPattern"
-test_glob "https://**.google.com" "https://foo.bar.google.com" "true" "DoubleAsteriskPattern: https://**.google.com matches https://foo.bar.google.com"
-test_glob "https://**.google.com" "https://google.com" "false" "DoubleAsteriskPattern: https://**.google.com does NOT match https://google.com (shell: ** in middle requires at least one character)"
-test_glob "https://**.google.com" "https://a.google.com" "true" "DoubleAsteriskPattern: https://**.google.com matches https://a.google.com"
-test_glob "https://**.google.com" "https://a.b.c.google.com" "true" "DoubleAsteriskPattern: https://**.google.com matches https://a.b.c.google.com"
-echo ""
-
 # ============================================================================
 # Escape Sequence Tests
 # ============================================================================
@@ -555,6 +524,53 @@ test_glob "test\\*.txt" "testa.txt" "false" "EscapeInPattern: test\\*.txt does n
 echo ""
 
 # ============================================================================
+# Boundary Condition Tests
+# ============================================================================
+
+# Test: LongPattern
+echo "Test: LongPattern"
+long_pattern=$(printf 'a%.0s' {1..1000})
+long_pattern="${long_pattern}*"
+long_string="${long_pattern%?}test"
+test_glob "$long_pattern" "$long_string" "true" "LongPattern: long pattern matches long string"
+echo ""
+
+# Test: LongString
+echo "Test: LongString"
+long_string=$(printf 'a%.0s' {1..10000})
+test_glob "*" "$long_string" "true" "LongString: * matches very long string"
+echo ""
+
+# Test: ComplexPattern
+echo "Test: ComplexPattern"
+test_glob "*([a-z])+([0-9])*(.txt|.pdf|.jpg)" "file123.txt" "true" "ComplexPattern: *([a-z])+([0-9])*(.txt|.pdf|.jpg) matches file123.txt"
+test_glob "*([a-z])+([0-9])*(.txt|.pdf|.jpg)" "abc456.pdf" "true" "ComplexPattern: *([a-z])+([0-9])*(.txt|.pdf|.jpg) matches abc456.pdf"
+test_glob "*([a-z])+([0-9])*(.txt|.pdf|.jpg)" "123.txt" "true" "ComplexPattern: *([a-z])+([0-9])*(.txt|.pdf|.jpg) matches 123.txt"
+echo ""
+
+# Test: ZeroLengthMatch
+echo "Test: ZeroLengthMatch"
+test_glob "*(test)" "" "true" "ZeroLengthMatch: *(test) matches empty"
+test_glob "*(test)" "test" "true" "ZeroLengthMatch: *(test) matches test"
+test_glob "*(test)" "testtest" "true" "ZeroLengthMatch: *(test) matches testtest"
+echo ""
+
+# ============================================================================
+# Parameterized Tests for Similar Cases
+# ============================================================================
+
+# Test: ParameterizedBasicPatterns
+echo "Test: ParameterizedBasicPatterns"
+test_glob "*.txt" "file.txt" "true" "Parameterized: *.txt matches file.txt"
+test_glob "*.txt" "file.pdf" "false" "Parameterized: *.txt does not match file.pdf"
+test_glob "test?" "test1" "true" "Parameterized: test? matches test1"
+test_glob "test?" "test" "false" "Parameterized: test? does not match test"
+test_glob "test?" "test12" "false" "Parameterized: test? does not match test12"
+test_glob "[a-z]*" "test" "true" "Parameterized: [a-z]* matches test"
+test_glob "[a-z]*" "TEST" "false" "Parameterized: [a-z]* does not match TEST"
+echo ""
+
+# ============================================================================
 # Special Character Tests
 # ============================================================================
 
@@ -600,6 +616,13 @@ test_glob "test*" "testa" "true" "PatternEndsWithWildcard: test* matches testa"
 test_glob "test*" "tes" "false" "PatternEndsWithWildcard: test* does not match tes"
 echo ""
 
+# Test: PatternAllWildcards
+echo "Test: PatternAllWildcards"
+test_glob "***" "" "true" "PatternAllWildcards: *** matches empty"
+test_glob "***" "a" "true" "PatternAllWildcards: *** matches a"
+test_glob "***" "abc" "true" "PatternAllWildcards: *** matches abc"
+echo ""
+
 # Test: ConsecutiveWildcards
 echo "Test: ConsecutiveWildcards"
 test_glob "test**file" "testfile" "true" "ConsecutiveWildcards: test**file matches testfile"
@@ -613,29 +636,12 @@ test_glob "test?*file" "test123file" "true" "QuestionStarCombination: test?*file
 test_glob "test?*file" "testfile" "false" "QuestionStarCombination: test?*file does not match testfile"
 echo ""
 
-# ============================================================================
-# Boundary Condition Tests
-# ============================================================================
-
-# Test: LongPattern
-echo "Test: LongPattern"
-long_pattern=$(printf 'a%.0s' {1..1000})
-long_pattern="${long_pattern}*"
-long_string="${long_pattern%?}test"
-test_glob "$long_pattern" "$long_string" "true" "LongPattern: long pattern matches long string"
-echo ""
-
-# Test: LongString
-echo "Test: LongString"
-long_string=$(printf 'a%.0s' {1..10000})
-test_glob "*" "$long_string" "true" "LongString: * matches very long string"
-echo ""
-
-# Test: ZeroLengthMatch
-echo "Test: ZeroLengthMatch"
-test_glob "*(test)" "" "true" "ZeroLengthMatch: *(test) matches empty"
-test_glob "*(test)" "test" "true" "ZeroLengthMatch: *(test) matches test"
-test_glob "*(test)" "testtest" "true" "ZeroLengthMatch: *(test) matches testtest"
+# Test: DoubleAsteriskPattern
+echo "Test: DoubleAsteriskPattern"
+test_glob "https://**.google.com" "https://foo.bar.google.com" "true" "DoubleAsteriskPattern: https://**.google.com matches https://foo.bar.google.com"
+test_glob "https://**.google.com" "https://google.com" "false" "DoubleAsteriskPattern: https://**.google.com does NOT match https://google.com (shell: ** in middle requires at least one character)"
+test_glob "https://**.google.com" "https://a.google.com" "true" "DoubleAsteriskPattern: https://**.google.com matches https://a.google.com"
+test_glob "https://**.google.com" "https://a.b.c.google.com" "true" "DoubleAsteriskPattern: https://**.google.com matches https://a.b.c.google.com"
 echo ""
 
 # ============================================================================
@@ -818,6 +824,14 @@ test_glob_brace "file[0-9].{txt,pdf}" "file1.txt" "true" "BraceExpansionWithSets
 test_glob_brace "file[0-9].{txt,pdf}" "file5.pdf" "true" "BraceExpansionWithSets: file[0-9].{txt,pdf} matches file5.pdf"
 test_glob_brace "file[0-9].{txt,pdf}" "filea.txt" "false" "BraceExpansionWithSets: file[0-9].{txt,pdf} does not match filea.txt"
 test_glob_brace "file[0-9].{txt,pdf}" "file1.jpg" "false" "BraceExpansionWithSets: file[0-9].{txt,pdf} does not match file1.jpg"
+echo ""
+
+# Test: BraceExpansionErrorUnclosed
+echo "Test: BraceExpansionErrorUnclosed"
+# Note: Shell doesn't throw exceptions, but we can test that unclosed braces don't match
+# In bash, unclosed braces are treated as literal characters
+test_glob "*.{h,hpp" "file.h" "false" "BraceExpansionErrorUnclosed: *.{h,hpp (unclosed) does not match file.h"
+test_glob "*.{h,hpp" "file.{h,hpp" "true" "BraceExpansionErrorUnclosed: *.{h,hpp (unclosed) matches literal *.{h,hpp"
 echo ""
 
 # Test: BraceExpansionEscaped
