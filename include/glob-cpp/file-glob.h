@@ -4,6 +4,8 @@
 #include <iostream>
 #include <cstdlib>
 #include "glob.h"
+#include <boost/filesystem.hpp>
+#include <boost/range/iterator_range.hpp>
 
 namespace glob {
 
