@@ -354,6 +354,7 @@ template<class charT>
 class SetItem {
  public:
   SetItem() = default;
+  virtual ~SetItem() = default;
 
   virtual bool Check(charT c) const = 0;
 };
@@ -461,7 +462,7 @@ class StateGroup: public State<charT> {
       size_t pos) {
     String<charT> str_part = str.substr(pos);
     bool r;
-    size_t str_pos;
+    size_t str_pos = 0;
 
     // each automata is a part of a union of the group, in basic check,
     // we want find only if any automata is true
@@ -2006,7 +2007,7 @@ class AstConsumer {
   }
 
  private:
-  int preview_state_ = -1;
+  ssize_t preview_state_ = -1;
   size_t current_state_ = 0;
 };
 
