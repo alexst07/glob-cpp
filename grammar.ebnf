@@ -1,7 +1,12 @@
 <glob>              ::= <concat-glob> <EOS>;
 <glob-group>        ::= <union> | <union> <glob-group>;
 <union>             ::= <concat-glob> | <concat-glob> "|" <union>
-<concat-glob>       ::= <basic-glob> | <basic-glob> <concat-glob>;
+<concat-glob>       ::= <basic-glob> | <basic-glob> <concat-glob> | <brace-expansion>;
+<brace-expansion>   ::= <concat-prefix> "{" <brace-items> "}" <concat-suffix>;
+<concat-prefix>      ::= <basic-glob>*;
+<concat-suffix>      ::= <basic-glob>*;
+<brace-items>       ::= <brace-item> | <brace-item> "," <brace-items>;
+<brace-item>        ::= <basic-glob>* | <brace-expansion>;
 <basic-glob>        ::= <group>
                       | <any>
                       | <star>

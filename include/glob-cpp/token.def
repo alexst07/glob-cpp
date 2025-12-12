@@ -17,5 +17,7 @@ TOKEN(UNION,       "|")
 TOKEN(LBRACKET,    "[")
 TOKEN(RBRACKET,    "]")
 TOKEN(NEGLBRACKET, "[^")
+TOKEN(LBRACE,      "{")
+TOKEN(RBRACE,      "}")
 
 #undef TOKEN

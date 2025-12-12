@@ -603,3 +603,126 @@ TEST_F(GlobTestFixture, DoubleAsteriskPattern) {
   EXPECT_TRUE(glob::glob_match("https://a.google.com", g));
   EXPECT_TRUE(glob::glob_match("https://a.b.c.google.com", g));
 }
+
+// ============================================================================
+// Brace Expansion Tests
+// ============================================================================
+
+TEST_F(GlobTestFixture, BraceExpansionBasic) {
+  glob::glob g("*.{h,hpp}");
+  EXPECT_TRUE(glob::glob_match("file.h", g));
+  EXPECT_TRUE(glob::glob_match("test.hpp", g));
+  EXPECT_FALSE(glob::glob_match("file.c", g));
+  EXPECT_FALSE(glob::glob_match("file.hh", g));
+}
+
+TEST_F(GlobTestFixture, BraceExpansionMultipleItems) {
+  glob::glob g("*.{h,hpp,c,cpp}");
+  EXPECT_TRUE(glob::glob_match("file.h", g));
+  EXPECT_TRUE(glob::glob_match("file.hpp", g));
+  EXPECT_TRUE(glob::glob_match("file.c", g));
+  EXPECT_TRUE(glob::glob_match("file.cpp", g));
+  EXPECT_FALSE(glob::glob_match("file.txt", g));
+  EXPECT_FALSE(glob::glob_match("file.hh", g));
+}
+
+TEST_F(GlobTestFixture, BraceExpansionWithPrefix) {
+  glob::glob g("test.{txt,md}");
+  EXPECT_TRUE(glob::glob_match("test.txt", g));
+  EXPECT_TRUE(glob::glob_match("test.md", g));
+  EXPECT_FALSE(glob::glob_match("test.pdf", g));
+  EXPECT_FALSE(glob::glob_match("atest.txt", g));
+}
+
+TEST_F(GlobTestFixture, BraceExpansionAtStart) {
+  glob::glob g("{a,b}*.txt");
+  EXPECT_TRUE(glob::glob_match("a.txt", g));
+  EXPECT_TRUE(glob::glob_match("b.txt", g));
+  EXPECT_TRUE(glob::glob_match("a123.txt", g));
+  EXPECT_TRUE(glob::glob_match("bfile.txt", g));
+  EXPECT_FALSE(glob::glob_match("c.txt", g));
+  EXPECT_FALSE(glob::glob_match("ab.txt", g));
+}
+
+TEST_F(GlobTestFixture, BraceExpansionSingleItem) {
+  glob::glob g("*.{h}");
+  EXPECT_TRUE(glob::glob_match("file.h", g));
+  EXPECT_FALSE(glob::glob_match("file.hpp", g));
+  EXPECT_FALSE(glob::glob_match("file.c", g));
+}
+
+TEST_F(GlobTestFixture, BraceExpansionWithWildcards) {
+  glob::glob g("test*.{txt,pdf}");
+  EXPECT_TRUE(glob::glob_match("test.txt", g));
+  EXPECT_TRUE(glob::glob_match("test123.pdf", g));
+  EXPECT_TRUE(glob::glob_match("test_file.txt", g));
+  EXPECT_FALSE(glob::glob_match("test.jpg", g));
+}
+
+TEST_F(GlobTestFixture, BraceExpansionNested) {
+  glob::glob g("*.{h{pp,xx},c}");
+  EXPECT_TRUE(glob::glob_match("file.hpp", g));
+  EXPECT_TRUE(glob::glob_match("file.hxx", g));
+  EXPECT_TRUE(glob::glob_match("file.c", g));
+  EXPECT_FALSE(glob::glob_match("file.h", g));
+  EXPECT_FALSE(glob::glob_match("file.hppp", g));
+}
+
+TEST_F(GlobTestFixture, BraceExpansionNestedComplex) {
+  glob::glob g("{a,b{1,2}}*.txt");
+  EXPECT_TRUE(glob::glob_match("a.txt", g));
+  EXPECT_TRUE(glob::glob_match("b1.txt", g));
+  EXPECT_TRUE(glob::glob_match("b2.txt", g));
+  EXPECT_TRUE(glob::glob_match("afile.txt", g));
+  EXPECT_TRUE(glob::glob_match("b1test.txt", g));
+  EXPECT_FALSE(glob::glob_match("b.txt", g));
+}
+
+TEST_F(GlobTestFixture, BraceExpansionEmptyBraces) {
+  // Empty braces should match empty string
+  glob::glob g("test{}");
+  EXPECT_TRUE(glob::glob_match("test", g));
+  EXPECT_FALSE(glob::glob_match("testx", g));
+}
+
+TEST_F(GlobTestFixture, BraceExpansionTrailingComma) {
+  glob::glob g("*.{h,}");
+  EXPECT_TRUE(glob::glob_match("file.h", g));
+  EXPECT_TRUE(glob::glob_match("file.", g)); // trailing comma adds empty item
+  EXPECT_FALSE(glob::glob_match("file.c", g));
+}
+
+TEST_F(GlobTestFixture, BraceExpansionLeadingComma) {
+  glob::glob g("*.{,h}");
+  EXPECT_TRUE(glob::glob_match("file.", g)); // leading comma adds empty item
+  EXPECT_TRUE(glob::glob_match("file.h", g));
+  EXPECT_FALSE(glob::glob_match("file.c", g));
+}
+
+TEST_F(GlobTestFixture, BraceExpansionWithSets) {
+  glob::glob g("file[0-9].{txt,pdf}");
+  EXPECT_TRUE(glob::glob_match("file1.txt", g));
+  EXPECT_TRUE(glob::glob_match("file5.pdf", g));
+  EXPECT_FALSE(glob::glob_match("filea.txt", g));
+  EXPECT_FALSE(glob::glob_match("file1.jpg", g));
+}
+
+TEST_F(GlobTestFixture, BraceExpansionErrorUnclosed) {
+  EXPECT_THROW({
+    glob::glob g("*.{h,hpp");
+  }, glob::Error);
+}
+
+TEST_F(GlobTestFixture, BraceExpansionEscaped) {
+  glob::glob g("\\{test\\}");
+  EXPECT_TRUE(glob::glob_match("{test}", g));
+  EXPECT_FALSE(glob::glob_match("test", g));
+}
+
+TEST_F(GlobTestFixture, BraceExpansionComplex) {
+  glob::glob g("prefix*{a,b}*suffix.{ext1,ext2}");
+  EXPECT_TRUE(glob::glob_match("prefixxaext1", g));
+  EXPECT_TRUE(glob::glob_match("prefixxbext2", g));
+  EXPECT_TRUE(glob::glob_match("prefix123a456suffix.ext1", g));
+  EXPECT_FALSE(glob::glob_match("prefixxsuffix.ext3", g));
+}
