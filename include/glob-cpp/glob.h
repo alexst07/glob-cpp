@@ -5,6 +5,7 @@
 #include <tuple>
 #include <vector>
 #include <memory>
+#include <utility>
 
 namespace glob {
 
@@ -95,11 +96,13 @@ class StateFail : public State<charT> {
     : State<charT>(StateType::FAIL, states){}
 
   bool Check(const String<charT>& str, size_t pos) override {
+    (void)str; (void)pos;
     return false;
   }
 
   std::tuple<size_t, size_t> Next(const String<charT>& str,
       size_t pos) override {
+    (void)str;
     return std::tuple<size_t, size_t>(0, ++pos);
   }
 };
@@ -111,11 +114,13 @@ class StateMatch : public State<charT> {
     : State<charT>(StateType::MATCH, states){}
 
   bool Check(const String<charT>& str, size_t pos) override {
+    (void)str; (void)pos;
     return true;
   }
 
   std::tuple<size_t, size_t> Next(const String<charT>& str,
       size_t pos) override {
+    (void)str;
     return std::tuple<size_t, size_t>(0, ++pos);
   }
 };
@@ -280,6 +285,7 @@ class StateAny : public State<charT> {
     : State<charT>(StateType::QUESTION, states){}
 
   bool Check(const String<charT>& str, size_t pos) override {
+    (void)str; (void)pos;
     // as it match any char, it is always trye
     return true;
   }
@@ -302,6 +308,7 @@ class StateStar : public State<charT> {
     : State<charT>(StateType::MULT, states){}
 
   bool Check(const String<charT>& str, size_t pos) override {
+    (void)str; (void)pos;
     // as it match any char, it is always trye
     return true;
   }
@@ -528,6 +535,7 @@ class StateGroup: public State<charT> {
         break;
       }
     }
+    throw Error("Unexpected group type in StateGroup::Next");
   }
 
   std::tuple<size_t, size_t> NextNeg(const String<charT>& str, size_t pos) {
@@ -1661,10 +1669,12 @@ class AstConsumer {
   }
 
   void ExecAny(AstNode<charT>* node, Automata<charT>& automata) {
+    (void)node;
     NewState<StateAny<charT>>(automata);
   }
 
   void ExecStar(AstNode<charT>* node, Automata<charT>& automata) {
+    (void)node;
     NewState<StateStar<charT>>(automata);
     automata.GetState(current_state_).AddNextState(current_state_);
   }
@@ -1969,10 +1979,12 @@ class MatchResults {
 
   MatchResults& operator=(const MatchResults& m) {
     results_ = m.results_;
+    return *this;
   }
 
   MatchResults& operator=(MatchResults&& m) {
     results_ = std::move(m.results_);
+    return *this;
   }
 
   bool empty() const {
