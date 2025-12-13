@@ -7,6 +7,18 @@
 #include <memory>
 #include <utility>
 
+#define GLOB_DEBUG 0
+
+#ifndef GLOB_DEBUG
+    #define GLOB_DEBUG 0
+#endif
+#if GLOB_DEBUG
+    #include <iostream>
+    #define GLOB_LOG(x) std::cerr << "[GLOB] " << x << std::endl
+#else
+    #define GLOB_LOG(x)
+#endif
+
 namespace glob {
 
 template<class charT>
@@ -203,7 +215,10 @@ class Automata {
     auto state = std::unique_ptr<State<charT>>(new T(*this,
         std::forward<Args>(args)...));
 
+    GLOB_LOG("NewState created, type: " << static_cast<int>(state->Type()) << ", pos: " << state_pos);
+
     states_.push_back(std::move(state));
+
     return state_pos;
   }
 
@@ -211,6 +226,10 @@ class Automata {
  private:
   std::tuple<bool, size_t> ExecAux(const String<charT>& str,
       bool comp_end = true) const {
+    GLOB_LOG("=== Automata::ExecAux ===");
+    GLOB_LOG("  String: '" << str << "' (len=" << str.length() << ")");
+    GLOB_LOG("  comp_end: " << (comp_end ? "true" : "false"));
+
     size_t state_pos = 0;
     size_t str_pos = 0;
 
@@ -218,22 +237,64 @@ class Automata {
     // until the string is all consumed
     while (state_pos != fail_state_ && state_pos != match_state_
            && str_pos < str.length()) {
+      GLOB_LOG("  State=" << state_pos << " StrPos=" << str_pos 
+               << " Char='" << (str_pos < str.length() ? str[str_pos] : '?') << "'");
+
       std::tie(state_pos, str_pos) = states_[state_pos]->Next(str, str_pos);
+      
+      if (state_pos == fail_state_) {
+        GLOB_LOG("  -> FAIL_STATE");
+      } else if (state_pos == match_state_) {
+        GLOB_LOG("  -> MATCH_STATE");
+      } else {
+        GLOB_LOG("  -> State=" << state_pos << " StrPos=" << str_pos);
+      }
+    }
+
+    // If we've consumed the entire string but haven't reached match or fail state,
+    // check if we're at a state that can transition to MATCH without consuming more input
+    if (str_pos == str.length() && state_pos != fail_state_ && state_pos != match_state_) {
+      State<charT>& current_state = *states_[state_pos];
+      StateType state_type = current_state.Type();
+      
+      if (state_type == StateType::MULT) {
+      	GLOB_LOG("Automata::ExecAux post loop check for StateType::MULT");
+        // Handle star state: check if it has MATCH as its next state (index 1)
+        const auto& next_states = current_state.GetNextStates();
+        if (next_states.size() > 1 && states_[next_states[1]]->Type() == StateType::MATCH) {
+          state_pos = next_states[1];
+        }
+      } else if (state_type == StateType::GROUP) {
+      	GLOB_LOG("Automata::ExecAux post loop check for StateType::GROUP");
+        // Handle group state: it may match empty alternative (e.g., {,.bak})
+        // Call Next() which is safe for StateGroup
+        size_t next_state_pos, next_str_pos;
+        std::tie(next_state_pos, next_str_pos) = current_state.Next(str, str_pos);
+        
+        // If the transition goes to match state or doesn't consume input, take it
+        if (next_state_pos == match_state_ || next_str_pos == str_pos) {
+          state_pos = next_state_pos;
+          str_pos = next_str_pos;
+        }
+      }
     }
 
     // if comp_end is true it matches only if the automata reached the end of
     // the string
+    bool result = false;
     if (comp_end) {
-      if ((state_pos == match_state_) && (str_pos == str.length())) {
-        return std::tuple<bool, size_t>(state_pos == match_state_, str_pos);
-      }
-
-      return std::tuple<bool, size_t>(false, str_pos);
+      result = (state_pos == match_state_) && (str_pos == str.length());
+      GLOB_LOG("  Final: state=" << state_pos << " match_state=" << match_state_ 
+               << " str_pos=" << str_pos << " str.length=" << str.length());
+      GLOB_LOG("  Result: " << (result ? "MATCH" : "NO MATCH"));
     } else {
       // if comp_end is false, compare only if the states reached the
       // match state
-      return std::tuple<bool, size_t>(state_pos == match_state_, str_pos);
+      result = (state_pos == match_state_);
+      GLOB_LOG("  Result (no comp_end): " << (result ? "MATCH" : "NO MATCH"));
     }
+    
+    return std::tuple<bool, size_t>(result, str_pos);
   }
 
   void ResetStates() {
@@ -286,7 +347,7 @@ class StateAny : public State<charT> {
 
   bool Check(const String<charT>& str, size_t pos) override {
     (void)str; (void)pos;
-    // as it match any char, it is always trye
+    // as it match any char, it is always true
     return true;
   }
 
@@ -447,37 +508,45 @@ class StateGroup: public State<charT> {
   std::tuple<bool, size_t> BasicCheck(const String<charT>& str,
       size_t pos) {
     String<charT> str_part = str.substr(pos);
+    GLOB_LOG("    StateGroup::BasicCheck: str_part='" << str_part << "' (" << automatas_.size() << " alternatives)");
     
     bool any_match = false;
     size_t longest_match_pos = 0;
     
+    int alt_num = 0;
     for (auto& automata : automatas_) {
+      GLOB_LOG("      Trying alternative " << alt_num);
       bool r;
       size_t str_pos;
       std::tie(r, str_pos) = automata->Exec(str_part, false);
+      GLOB_LOG("      Alternative " << alt_num << " result: " << (r ? "MATCH" : "NO MATCH") << " consumed=" << str_pos);
       
       if (r) {
         any_match = true;
         // Keep track of the longest match
         if (str_pos > longest_match_pos) {
           longest_match_pos = str_pos;
-          
-          // If we consumed all remaining characters, 
+          GLOB_LOG("      New longest match: " << longest_match_pos);
+            
+          // If we consumed all remaining characters,
           // we can't find a longer match, so stop here
           if (longest_match_pos == str_part.length()) {
             break;
           }
         }
       }
+      alt_num++;
     }
 
     if (any_match) {
+      GLOB_LOG("    StateGroup::BasicCheck: SUCCESS, longest match consumed=" << longest_match_pos);
       return std::tuple<bool, size_t>(true, pos + longest_match_pos);
     }
     
+    GLOB_LOG("    StateGroup::BasicCheck: ALL FAILED");
     return std::tuple<bool, size_t>(false, pos);
   }
-
+  
   bool Check(const String<charT>& str, size_t pos) override {
     switch (type_) {
       case Type::BASIC:
@@ -556,7 +625,7 @@ class StateGroup: public State<charT> {
     std::tie(r, new_pos) = BasicCheck(str, pos);
     if (r) {
       this->SetMatchedStr(this->MatchedStr() + str.substr(pos, new_pos - pos));
-      return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
+      return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos); // for non-repeating BASIC groups
     }
 
     return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
@@ -693,10 +762,12 @@ class Lexer {
  public:
   static const char kEndOfInput = -1;
 
-    Lexer(const String<charT>& str): str_(str), c_{str[0]} {}
+  Lexer(const String<charT>& str): str_(str), c_{str[0]} {}
 
   std::vector<Token<charT>> Scanner() {
     std::vector<Token<charT>> tokens;
+    GLOB_LOG("=== Starting Lexer ===");
+    GLOB_LOG("Pattern: " << str_);
     while(true) {
       switch (c_) {
         case '?': {
@@ -725,6 +796,7 @@ class Lexer {
 
 		case '{': {
           brace_depth_++;
+          GLOB_LOG("LBRACE (depth now: " << brace_depth_ << ")");
           tokens.push_back(Select(TokenKind::LBRACE));
           Advance();
           break;
@@ -734,6 +806,7 @@ class Lexer {
           if (brace_depth_ > 0) {
             brace_depth_--;
           }
+          GLOB_LOG("RBRACE (depth now: " << brace_depth_ << ")");
           tokens.push_back(Select(TokenKind::RBRACE));
           Advance();
           break;
@@ -776,14 +849,16 @@ class Lexer {
         case ',': {
           // Only UNION inside braces, otherwise regular char
           if (brace_depth_ > 0) {
+            GLOB_LOG("COMMA -> UNION (inside braces)");
             tokens.push_back(Select(TokenKind::UNION));
           } else {
+            GLOB_LOG("COMMA -> CHAR (outside braces)");
             tokens.push_back(Select(TokenKind::CHAR, ','));
           }
           Advance();
           break;
         }
-
+        
         case '@': {
           Advance();
           if (c_ == '(') {
@@ -863,7 +938,7 @@ class Lexer {
           }
           break;
         }
-
+        
         case '\\': {
           Advance();
           if (c_ == kEndOfInput) {
@@ -877,9 +952,12 @@ class Lexer {
 
         default: {
           if (c_ == kEndOfInput) {
+            GLOB_LOG("EOS");
             tokens.push_back(Select(TokenKind::EOS));
+            GLOB_LOG("=== Lexer Complete: " << tokens.size() << " tokens ===");
             return tokens;
           } else {
+            GLOB_LOG("CHAR: '" << c_ << "'");
             tokens.push_back(Select(TokenKind::CHAR, c_));
             Advance();
           }
@@ -1374,6 +1452,7 @@ class Parser {
   }
 
   AstNodePtr<charT> ParserBraceGroup() {
+    GLOB_LOG("=== ParserBraceGroup START ===");
     Token<charT>& tk = NextToken();
     if (tk != TokenKind::LBRACE) {
       throw Error("Expected '{'");
@@ -1386,31 +1465,71 @@ class Parser {
       throw Error("Expected '}' at end of brace group");
     }
 
+    GLOB_LOG("=== ParserBraceGroup END ===");
     // Treat brace groups as BASIC groups (matches if any alternative matches)
     return AstNodePtr<charT>(new GroupNode<charT>(
         GroupNode<charT>::GroupType::BASIC, std::move(group_content)));
   }
 
   AstNodePtr<charT> ParserBraceUnion() {
+    GLOB_LOG("=== ParserBraceUnion START ===");
     std::vector<AstNodePtr<charT>> items;
     
-    items.push_back(ParserBraceItem());
+    // Parse first item
+    AstNodePtr<charT> first_item = ParserBraceItem();
+    int count = 0;
+    
+    // If it's a UnionNode (from range expansion), flatten its alternatives
+    if (first_item->GetType() == AstNode<charT>::Type::UNION) {
+      GLOB_LOG("  UnionNode is a UNION, flattening");
+      UnionNode<charT>* union_node = static_cast<UnionNode<charT>*>(first_item.get());
+      // Move all alternatives from the nested union into our items vector
+      for (auto& item : union_node->GetItems()) {
+        items.push_back(std::move(item));
+        count++;
+        GLOB_LOG("  Added inner item " << count);
+      }
+    } else {
+      items.push_back(std::move(first_item));
+      count++;
+      GLOB_LOG("  Added item " << count);
+    }
 
     // Parse additional comma-separated items
     while (GetToken() == TokenKind::UNION) {
+      GLOB_LOG("  Found UNION token");
       Advance();
-      items.push_back(ParserBraceItem());
+      AstNodePtr<charT> item = ParserBraceItem();
+      
+      // Flatten any UnionNodes from range expansion
+      if (item->GetType() == AstNode<charT>::Type::UNION) {
+      	GLOB_LOG("  UnionNode is a UNION, flattening");
+        UnionNode<charT>* union_node = static_cast<UnionNode<charT>*>(item.get());
+        for (auto& inner_item : union_node->GetItems()) {
+          items.push_back(std::move(inner_item));
+          count++;
+          GLOB_LOG("  Added inner item " << count);
+        }
+      } else {
+        items.push_back(std::move(item));
+        count++;
+        GLOB_LOG("  Added item " << count);
+      }
     }
 
+    GLOB_LOG("=== ParserBraceUnion END: " << count << " items ===");
     return AstNodePtr<charT>(new UnionNode<charT>(std::move(items)));
   }
-
+  
   AstNodePtr<charT> ParserBraceItem() {
+    GLOB_LOG("=== ParserBraceItem START ===");
     // Check if this is a range expression (e.g., a..z)
     if (GetToken() == TokenKind::CHAR && PeekAhead() == TokenKind::DOTDOT) {
+      GLOB_LOG("  Detected RANGE");
       return ParserBraceRange();
     }
     
+    GLOB_LOG("  Parsing as CONCAT");
     // Otherwise parse as concatenated characters within this alternative
     return ParserBraceConcat();
   }
@@ -1457,6 +1576,7 @@ class Parser {
   }
 
   AstNodePtr<charT> ParserBraceConcat() {
+    GLOB_LOG("=== ParserBraceConcat START ===");
     auto is_brace_terminator = [&]() -> bool {
       Token<charT>& tk = GetToken();
       return tk == TokenKind::RBRACE || 
@@ -1465,45 +1585,56 @@ class Parser {
     };
 
     std::vector<AstNodePtr<charT>> parts;
-    
+    int part_num = 0;
+
     while (!is_brace_terminator()) {
       // Only allow basic glob patterns within brace alternatives
       Token<charT>& tk = GetToken();
+      GLOB_LOG("  Part " << part_num << ": " << tk);
       
       switch (tk.Kind()) {
         case TokenKind::CHAR:
+          GLOB_LOG("    CHAR: '" << tk.Value() << "'");
           parts.push_back(ParserChar());
           break;
           
         case TokenKind::QUESTION:
+          GLOB_LOG("    QUESTION");
           Advance();
           parts.push_back(AstNodePtr<charT>(new AnyNode<charT>()));
           break;
           
         case TokenKind::STAR:
+          GLOB_LOG("    STAR");
           Advance();
           parts.push_back(AstNodePtr<charT>(new StarNode<charT>()));
           break;
           
         case TokenKind::LBRACKET:
         case TokenKind::NEGLBRACKET:
+          GLOB_LOG("    SET");
           parts.push_back(ParserSet());
           break;
           
         case TokenKind::LBRACE:
+          GLOB_LOG("    NESTED BRACE");
           // Allow nested braces
           parts.push_back(ParserBraceGroup());
           break;
           
         case TokenKind::SUB:
+          GLOB_LOG("    SUB");
           Advance();
           parts.push_back(AstNodePtr<charT>(new CharNode<charT>('-')));
           break;
           
         default:
+          GLOB_LOG("    ERROR: Unexpected token");
           throw Error("Unexpected token in brace alternative");
       }
     }
+
+    GLOB_LOG("=== ParserBraceConcat END: " << part_num << " parts (empty=" << (parts.empty() ? "yes" : "no") << ") ===");
 
     // Handle empty alternative (e.g., {,.bak})
     if (parts.empty()) {
@@ -1628,6 +1759,7 @@ class AstConsumer {
     for (auto& basic_glob : basic_globs) {
       ExecBasicGlob(basic_glob.get(), automata);
     }
+    GLOB_LOG("ExecConcat finished, preview_state_: " << preview_state_);
   }
 
   void ExecBasicGlob(AstNode<charT>* node, Automata<charT>& automata) {
@@ -1763,30 +1895,52 @@ class AstConsumer {
 
     NewState<StateGroup<charT>>(automata, state_group_type,
         std::move(automatas));
-    automata.GetState(current_state_).AddNextState(current_state_);
+    // skip BASIC (and potentially AT/NEG if non-repeating)
+    if (state_group_type != StateGroup<charT>::Type::BASIC &&
+        state_group_type != StateGroup<charT>::Type::AT &&
+        state_group_type != StateGroup<charT>::Type::NEG) {
+      automata.GetState(current_state_).AddNextState(current_state_);
+    }  
   }
 
   std::vector<std::unique_ptr<Automata<charT>>> ExecUnion(
       AstNode<charT>* node) {
     UnionNode<charT>* union_node = static_cast<UnionNode<charT>*>(node);
     auto& items = union_node->GetItems();
+    GLOB_LOG("=== ExecUnion: Processing " << items.size() << " alternatives ===");
     std::vector<std::unique_ptr<Automata<charT>>> vec_automatas;
+    int alt_num = 0;
+
     for (auto& item : items) {
+      GLOB_LOG("  Alternative " << alt_num << ": Type=" << static_cast<int>(item->GetType()));
       std::unique_ptr<Automata<charT>> automata_ptr(new Automata<charT>);
       AstConsumer ast_consumer;
       ast_consumer.ExecConcat(item.get(), *automata_ptr);
-
+      GLOB_LOG("ExecUnion for item, preview_state_: " << ast_consumer.preview_state_);
+  
       size_t match_state = automata_ptr->template NewState<StateMatch<charT>>();
-      automata_ptr->GetState(ast_consumer.preview_state_)
-          .AddNextState(match_state);
+      
+      // Check if any states were created during ExecConcat
+      if (ast_consumer.preview_state_ >= 0) {
+        // Normal case: link the last created state to the match state
+        automata_ptr->GetState(ast_consumer.preview_state_)
+            .AddNextState(match_state);
+      } else {
+        // Empty concat (e.g., from {,.bak}): no states were created
+        // The match_state (state 0) will match immediately at the start
+        // No linking needed - execution starts at state 0 which is match_state
+      }
+      
       automata_ptr->SetMatchState(match_state);
-
+  
       size_t fail_state = automata_ptr->template NewState<StateFail<charT>>();
       automata_ptr->SetFailState(fail_state);
-
+  
       vec_automatas.push_back(std::move(automata_ptr));
+      alt_num++;
     }
 
+    GLOB_LOG("=== ExecUnion: Created " << vec_automatas.size() << " automata ===");
     return vec_automatas;
   }
 
