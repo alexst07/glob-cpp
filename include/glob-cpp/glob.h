@@ -693,8 +693,7 @@ class Lexer {
  public:
   static const char kEndOfInput = -1;
 
-    Lexer(const String<charT>& str)
-     : str_(str), pos_{0}, c_{str[0]}, brace_depth_{0}, paren_depth_{0}, bracket_depth_{0} {}
+    Lexer(const String<charT>& str): str_(str), c_{str[0]} {}
 
   std::vector<Token<charT>> Scanner() {
     std::vector<Token<charT>> tokens;
@@ -926,11 +925,11 @@ class Lexer {
   }
 
   String<charT> str_;
-  size_t pos_;
+  size_t pos_ = 0;
   charT c_;
-  int brace_depth_; // tracks {} nesting
-  int paren_depth_; // tracks () nesting
-  int bracket_depth_; // tracks [] nesting
+  int brace_depth_ = 0; // tracks {} nesting
+  int paren_depth_ = 0; // tracks () nesting
+  int bracket_depth_ = 0; // tracks [] nesting
 };
 
 
