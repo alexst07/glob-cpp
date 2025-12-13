@@ -402,6 +402,7 @@ template<class charT>
 class SetItem {
  public:
   SetItem() = default;
+  virtual ~SetItem() = default;
 
   virtual bool Check(charT c) const = 0;
 };
@@ -1954,7 +1955,7 @@ class AstConsumer {
   }
 
  private:
-  int preview_state_ = -1;
+  ssize_t preview_state_ = -1;
   size_t current_state_ = 0;
 };
 

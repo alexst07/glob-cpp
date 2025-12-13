@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.12)
-project(glob-cpp)
+project(glob-cpp VERSION 1.0.0)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
