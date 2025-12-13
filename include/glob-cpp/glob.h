@@ -609,24 +609,46 @@ class StateGroup: public State<charT> {
   }
 
   std::tuple<size_t, size_t> NextNeg(const String<charT>& str, size_t pos) {
-    bool r;
-    size_t new_pos;
-    std::tie(r, new_pos) = BasicCheck(str, pos);
-    if (r) {
-      this->SetMatchedStr(this->MatchedStr() + str.substr(pos, new_pos - pos));
-      return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
-    }
-
-    return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+      if (pos >= str.length()) {
+          return std::tuple<size_t, size_t>(GetAutomata().FailState(), pos);
+      }
+  
+      bool any_match = false;
+      size_t longest_failed = 0;
+  
+      for (auto& automata : automatas_) {
+          bool r;
+          size_t consumed;
+          std::tie(r, consumed) = automata->Exec(str.substr(pos), false);
+  
+          if (r) {
+              any_match = true;
+              // Can early-exit: one match fails the whole negation
+              break;
+          }
+          // Track longest prefix that failed this alternative
+          if (consumed > longest_failed) {
+              longest_failed = consumed;
+          }
+      }
+  
+      if (any_match) {
+          return std::tuple<size_t, size_t>(GetAutomata().FailState(), pos);
+      }
+  
+      // None matched - negation succeeds, consume longest failed prefix
+      // For char classes = 1, for strings = length until mismatch
+      this->SetMatchedStr(str.substr(pos, longest_failed));
+      return std::tuple<size_t, size_t>(GetNextStates()[0], pos + longest_failed);  // 0 for non-repeating NEGATIVE groups: !(...)
   }
-
+  
   std::tuple<size_t, size_t> NextBasic(const String<charT>& str, size_t pos) {
     bool r;
     size_t new_pos;
     std::tie(r, new_pos) = BasicCheck(str, pos);
     if (r) {
       this->SetMatchedStr(this->MatchedStr() + str.substr(pos, new_pos - pos));
-      return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos); // for non-repeating BASIC groups
+      return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos); // 0 for non-repeating BASIC/AT groups: {a,b,c} @(...)
     }
 
     return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
