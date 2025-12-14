@@ -1,11 +1,13 @@
 #!/bin/bash
 
-# Shell script to test glob patterns - EXACT SAME TESTS AS C++ TESTS
-# Uses bash case statements which support glob patterns
-# This allows direct comparison between shell globbing and C++ glob library
+# Unified test script for glob patterns
+# Tests either:
+#   1. Shell glob behavior (bash case statements) - when run without arguments
+#   2. C++ glob tool - when run with path to executable
 #
-# Note: Shell uses [!...] for negation, C++ uses [^...]
-#       Extended globbing enabled for patterns like *() and +()
+# Usage:
+#   ./glob_test.sh              # Test shell glob behavior
+#   ./glob_test.sh /path/to/glob_tool  # Test C++ glob tool
 
 # Don't exit on error - we want to run all tests
 set +e
@@ -17,14 +19,66 @@ shopt -s extglob
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 PASSED=0
 FAILED=0
+MODE=""
+GLOB_TOOL=""
+VERBOSE=0
+
+# ============================================================================
+# Mode Detection and Setup
+# ============================================================================
+
+if [ $# -eq 0 ]; then
+    MODE="shell"
+    echo -e "${BLUE}=========================================="
+    echo "Testing: SHELL GLOB BEHAVIOR (bash)"
+    echo -e "==========================================${NC}"
+elif [ $# -eq 1 ] || [ $# -eq 2 ]; then
+    if [ "$1" = "-v" ] || [ "$1" = "--verbose" ]; then
+        VERBOSE=1
+        shift
+    elif [ "$2" = "-v" ] || [ "$2" = "--verbose" ]; then
+        VERBOSE=1
+    fi
+
+    if [ $# -eq 0 ]; then
+        MODE="shell"
+    else
+        GLOB_TOOL="$1"
+        if [ ! -x "$GLOB_TOOL" ]; then
+            echo -e "${RED}Error: '$GLOB_TOOL' is not an executable file${NC}"
+            exit 1
+        fi
+        MODE="tool"
+        echo -e "${BLUE}=========================================="
+        echo "Testing: C++ GLOB TOOL"
+        echo "Tool: $GLOB_TOOL"
+        [ $VERBOSE -eq 1 ] && echo "Verbose mode: ON"
+        echo -e "==========================================${NC}"
+    fi
+else
+    echo "Usage: $0 [-v|--verbose] [path_to_glob_executable]"
+    echo "  No args: Test shell glob behavior"
+    echo "  With arg: Test C++ glob tool"
+    echo "  -v / --verbose: Show tool output (only in tool mode)"
+    exit 1
+fi
+
+echo ""
+
+# ============================================================================
+# Test Functions - Shell Mode
+# ============================================================================
+# Note: Shell uses [!...] for negation, C++ uses [^...]
+#       Extended globbing enabled for patterns like *() and +()
 
 # Test function: test_glob pattern string expected test_name
 # Uses bash case statement for glob matching
-test_glob() {
+test_glob_shell() {
     local pattern="$1"
     local test_string="$2"
     local expected="$3"
@@ -57,7 +111,7 @@ test_glob() {
 
 # Test function for brace expansion patterns
 # Bash expands braces before pattern matching in case statements
-test_glob_brace() {
+test_glob_brace_shell() {
     local pattern="$1"
     local test_string="$2"
     local expected="$3"
@@ -93,6 +147,57 @@ test_glob_brace() {
         return 1
     fi
 }
+
+# ============================================================================
+# Test Functions - Tool Mode
+# ============================================================================
+
+test_glob_tool() {
+    local pattern="$1"
+    local test_string="$2"
+    local expected="$3"
+    local test_name="$4"
+    
+    if [ $VERBOSE -eq 1 ]; then
+        # Show command and full output
+        echo "Running: $GLOB_TOOL \"$pattern\" \"$test_string\""
+        "$GLOB_TOOL" "$pattern" "$test_string"
+        local result=$?
+    else
+        # Default quiet behavior
+        "$GLOB_TOOL" "$pattern" "$test_string" > /dev/null 2>&1
+        local result=$?
+    fi
+    
+    local result_str
+    if [ $result -eq 0 ]; then
+        result_str="true"
+    else
+        result_str="false"
+    fi
+    
+    if [ "$result_str" = "$expected" ]; then
+        echo -e "${GREEN}PASS${NC}: $test_name"
+        ((PASSED++))
+        return 0
+    else
+        echo -e "${RED}FAIL${NC}: $test_name - Pattern: '$pattern' String: '$test_string' Expected: $expected Got: $result_str"
+        ((FAILED++))
+        return 1
+    fi
+}
+
+# ============================================================================
+# Set up function aliases based on mode
+# ============================================================================
+
+if [ "$MODE" = "shell" ]; then
+    test_glob() { test_glob_shell "$@"; }
+    test_glob_brace() { test_glob_brace_shell "$@"; }
+else
+    test_glob() { test_glob_tool "$@"; }
+    test_glob_brace() { test_glob_tool "$@"; }
+fi
 
 echo "=========================================="
 echo "Shell Glob Pattern Test Suite"
@@ -316,6 +421,8 @@ echo "Test: GroupNeg"
 test_glob "!([a-z]).txt" "A.txt" "true" "GroupNeg: !([a-z]).txt matches A.txt"
 test_glob "!([a-z]).txt" "1.txt" "true" "GroupNeg: !([a-z]).txt matches 1.txt"
 test_glob "!([a-z]).txt" "a.txt" "false" "GroupNeg: !([a-z]).txt does not match a.txt"
+test_glob "!(foo|bar).txt" "baz.txt" "true" "GroupNeg: !(foo|bar).txt matches baz.txt"
+
 echo ""
 
 # Test: GroupUnion
@@ -572,7 +679,7 @@ test_glob_brace "{a,b}*.txt" "b.txt" "true" "BraceExpansionAtStart: {a,b}*.txt m
 test_glob_brace "{a,b}*.txt" "a123.txt" "true" "BraceExpansionAtStart: {a,b}*.txt matches a123.txt"
 test_glob_brace "{a,b}*.txt" "bfile.txt" "true" "BraceExpansionAtStart: {a,b}*.txt matches bfile.txt"
 test_glob_brace "{a,b}*.txt" "c.txt" "false" "BraceExpansionAtStart: {a,b}*.txt does not match c.txt"
-test_glob_brace "{a,b}*.txt" "ab.txt" "false" "BraceExpansionAtStart: {a,b}*.txt does not match ab.txt"
+test_glob_brace "{a,b}*.txt" "ab.txt" "true" "BraceExpansionAtStart: {a,b}*.txt matches ab.txt"
 echo ""
 
 # Test: BraceExpansionSingleItem
@@ -653,23 +760,103 @@ test_glob_brace "prefix*{a,b}*suffix.{ext1,ext2}" "prefixxbext2" "false" "BraceE
 test_glob_brace "prefix*{a,b}*suffix.{ext1,ext2}" "prefixxsuffix.ext3" "false" "BraceExpansionComplex: prefix*{a,b}*suffix.{ext1,ext2} does not match prefixxsuffix.ext3"
 echo ""
 
+# ============================================================================
+# EDGE-CASE TESTS FOR BRACE EXPANSION (StateGroup::NextBasic coverage)
+# ============================================================================
+
+echo "Test: Brace Expansion - Empty Only"
+test_glob_brace "file{}" "file" "true" "file{} matches file (empty alternative only)"
+test_glob_brace "file{}" "filex" "false" "file{} does not match filex"
+test_glob_brace "{}file" "file" "true" "{}file matches file (empty prefix)"
+test_glob_brace "{file}" "file" "true" "{file} matches file (single non-empty)"
+test_glob_brace "{}" "" "true" "{} matches empty string"
+test_glob_brace "{}" "a" "false" "{} does not match non-empty"
+echo ""
+
+echo "Test: Brace Expansion - Leading/Trailing Empty"
+test_glob_brace "{,.bak}file" "file" "true" "{,.bak}file matches file (leading empty)"
+test_glob_brace "{,.bak}file" ".bakfile" "true" "{,.bak}file matches .bakfile"
+test_glob_brace "pre{,.bak}" "pre" "true" "pre{,.bak} matches pre (trailing empty)"
+test_glob_brace "pre{,.bak}" "pre.bak" "true" "pre{,.bak} matches pre.bak"
+echo ""
+
+echo "Test: Brace Expansion - Multiple Empty Alternatives"
+test_glob_brace "file{,,,.bak}" "file" "true" "file{,,,.bak} matches file (multiple empty ok)"
+test_glob_brace "file{,,,.bak}" "file.bak" "true" "file{,,,.bak} matches file.bak"
+test_glob_brace "{,,}file{,,}" "file" "true" "{,,}file{,,} matches file (all empty paths)"
+echo ""
+
+echo "Test: Brace Expansion - Empty in Nested"
+test_glob_brace "a{b{c,},d}" "ab" "true" "a{b{c,},d} matches ab (inner empty)"
+test_glob_brace "a{b{c,},d}" "abc" "true" "a{b{c,},d} matches abc"
+test_glob_brace "{outer{inner,}}" "outer" "true" "{outer{inner,}} matches outer (nested empty)"
+test_glob_brace "{outer{inner,}}" "outerinner" "true" "{outer{inner,}} matches outerinner"
+echo ""
+
+echo "Test: Brace Expansion - Empty at Pattern End"
+test_glob_brace "log{" "" "false" "'log{' does not match empty string (incomplete brace)"
+# Note: if parser rejects incomplete brace, this test should fail compilation; otherwise behavior defined
+test_glob_brace "file{" "file" "false" "'file{' does not match file (incomplete brace)"
+echo ""
+
+echo "Test: Brace Expansion - Anomalous/Invalid Patterns (should reject or literal)"
+# These test parser robustness – should either throw Error or treat as literal
+test_glob "file{a,b" "file{a,b" "true" "Unclosed brace treated as literal"
+test_glob "file{a,b" "filea" "false" "Unclosed brace does not expand"
+test_glob "file}" "file}" "true" "Lone '}' is literal"
+test_glob "file{a,,b}" "filea" "true" "file{a,,b} allows double comma"
+test_glob "file{a,,b}" "file" "true" "file{a,,b} matches file (empty allowed)"
+echo ""
+
+echo "Test: Brace Expansion - Incomplete / Unbalanced"
+# Complete brace followed by literal '{'
+test_glob "{a,b}{" "a{" "true" "{a,b}{ matches a{ (trailing { literal)"
+test_glob "{a,b}{" "b{" "true" "{a,b}{ matches b{"
+test_glob "{a,b}{" "{a,b}{" "false" "{a,b}{ does not match literal {a,b}{"
+test_glob "{a,b}{" "ax" "false" "{a,b}{ does not match ax"
+
+# Truly incomplete (unclosed) brace – should either error or treat as literal
+test_glob "{a,b" "{a,b" "true" "Unclosed brace {a,b treated as literal (fallback)"
+test_glob "{a,b" "ab" "false" "Unclosed brace does not expand"
+test_glob "file{a,b" "filea" "false" "Unclosed brace no expansion"
+
+# Lone stray braces
+test_glob "file}" "file}" "true" "Lone } is literal"
+test_glob "{file" "{file" "true" "Unopened { treated as literal"
+echo ""
+
+echo "Test: Brace Expansion - With Other Wildcards at Boundaries"
+test_glob_brace "*{a,b}.txt" "testa.txt" "true" "*{a,b}.txt matches testa.txt"
+test_glob_brace "*{a,b}.txt" "testb.txt" "true" "*{a,b}.txt matches testb.txt"
+test_glob_brace "?{a,b}.txt" "xa.txt" "true" "?{a,b}.txt matches xa.txt"
+test_glob_brace "?{a,b}.txt" "xb.txt" "true" "?{a,b}.txt matches xb.txt"
+test_glob_brace "{a,b}*.txt" "a123.txt" "true" "{a,b}*.txt matches a123.txt"
+test_glob_brace "{a,b}*.txt" "b.txt" "true" "{a,b}*.txt matches b.txt"
+echo ""
+
+# ============================================================================
 # Summary
-echo "=========================================="
-echo "Test Summary"
-echo "=========================================="
-echo -e "Total tests: $((PASSED + FAILED))"
-echo -e "${GREEN}Passed: $PASSED${NC}"
-echo -e "${RED}Failed: $FAILED${NC}"
+# ============================================================================
+
+echo ""
+echo -e "${BLUE}=========================================="
+echo "           Test Summary"
+echo -e "==========================================${NC}"
+echo ""
+echo "Mode: $MODE"
+if [ "$MODE" = "tool" ]; then
+    echo "Tool: $GLOB_TOOL"
+fi
+echo ""
+echo "Total tests:  $((PASSED + FAILED))"
+echo -e "Passed:       ${GREEN}$PASSED${NC}"
+echo -e "Failed:       ${RED}$FAILED${NC}"
 echo ""
 
 if [ $FAILED -eq 0 ]; then
     echo -e "${GREEN}All tests passed!${NC}"
     exit 0
 else
-    echo -e "${RED}Some tests failed!${NC}"
-    echo ""
-    echo "Note: Differences may be due to:"
-    echo "  - Shell uses [!...] for negation, C++ uses [^...] (converted automatically)"
-    echo "  - Shell globbing behavior differences"
+    echo -e "${RED}Some tests failed${NC}"
     exit 1
 fi
