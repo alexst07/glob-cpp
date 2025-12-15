@@ -70,7 +70,7 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "*.{h,hp,hpp,hxx,c,cc,cp,cpp,cxx}"
-            isEnabled = "NO">
+            isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "*.@(h|hp|hpp|hxx|c|cc|cp|cpp|cxx)"
@@ -78,7 +78,7 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "foo.hp"
-            isEnabled = "NO">
+            isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "[A-Z]*.cpp"
@@ -97,7 +97,7 @@
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "&apos;*/baz**/*.cpp"
+            argument = "*/baz**/*.cpp"
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
@@ -137,12 +137,12 @@
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "&quot;!([a-z]).txt&quot;"
-            isEnabled = "YES">
+            argument = "!([a-z]).txt"
+            isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "A.txt"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
       </CommandLineArguments>
    </LaunchAction>
