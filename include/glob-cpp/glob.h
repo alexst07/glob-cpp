@@ -2,6 +2,7 @@
 #define GLOB_CPP_H
 
 #include <string>
+#include <iostream>
 #include <tuple>
 #include <vector>
 #include <memory>
@@ -39,7 +40,6 @@
   #define GLOBSTAR_TRY try
 
   #ifndef GLOBSTAR_EXCEPTION_LOG
-    #include <iostream>
     #define GLOBSTAR_EXCEPTION_LOG(context, ex_what) \
       std::cerr << "[glob-cpp] Exception in " << context << ": " << ex_what << std::endl
   #endif
@@ -2145,7 +2145,7 @@ class SimpleGlob {
 
   void Parser(const String<charT>& pattern) {
     size_t pos = 0;
-    int preview_state = -1;
+    ssize_t preview_state = -1;
 
     while(pos < pattern.length()) {
       size_t current_state = 0;
