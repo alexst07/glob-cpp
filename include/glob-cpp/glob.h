@@ -2,22 +2,75 @@
 #define GLOB_CPP_H
 
 #include <string>
+#include <iostream>
 #include <tuple>
 #include <vector>
 #include <memory>
 #include <utility>
 
-#define GLOB_DEBUG 0
+// #define GLOB_DEBUG 1
 
 #ifndef GLOB_DEBUG
-    #define GLOB_DEBUG 0
+  #define GLOB_DEBUG 0
 #endif
 #if GLOB_DEBUG
-    #include <iostream>
-    #define GLOB_LOG(x) std::cerr << "[GLOB] " << x << std::endl
+  #define GLOB_LOG(x) std::cerr << "[GLOB] " << x << std::endl
 #else
-    #define GLOB_LOG(x)
+  #define GLOB_LOG(x)
 #endif
+
+// ============================================================================
+// Exception Handling Policy Configuration
+// ============================================================================
+// Client controls exception handling via GLOBSTAR_NOEXCEPT_ENABLED:
+//
+// GLOBSTAR_NOEXCEPT_ENABLED 1 (default):
+//   - Public API functions are noexcept
+//   - Exceptions caught and logged internally
+//   - Safe fallback behavior on errors
+//
+// GLOBSTAR_NOEXCEPT_ENABLED 0:
+//   - Functions can throw
+//   - Exceptions propagate naturally
+//   - Better for debugging with full stack traces
+//
+// GLOBSTAR_EXCEPTION_LOG:
+//   - Customize logging (only used when GLOBSTAR_NOEXCEPT_ENABLED is 1)
+//   - Default: logs to stderr using std::cerr
+//   - Example: #define GLOBSTAR_EXCEPTION_LOG(context, message) my_log(context, message)
+// ============================================================================
+
+#ifndef GLOBSTAR_NOEXCEPT_ENABLED
+  #define GLOBSTAR_NOEXCEPT_ENABLED 1
+#endif
+
+#if GLOBSTAR_NOEXCEPT_ENABLED
+
+  // ========== NOEXCEPT MODE ==========
+  #define GLOBSTAR_NOEXCEPT noexcept
+  #define GLOBSTAR_TRY try
+
+  #ifndef GLOBSTAR_EXCEPTION_LOG
+    #define GLOBSTAR_EXCEPTION_LOG(context, ex_what) \
+      std::cerr << "[glob-cpp] Exception in " << context << ": " << ex_what << std::endl
+  #endif
+
+  #define GLOBSTAR_CATCH_AND_LOG(context) \
+    catch (const std::exception& e) { \
+      GLOBSTAR_EXCEPTION_LOG(context, e.what()); \
+    } catch (...) { \
+      GLOBSTAR_EXCEPTION_LOG(context, "Unknown exception caught"); \
+    }
+
+#else // GLOBSTAR_NOEXCEPT_ENABLED
+
+  // ========== EXCEPTION PROPAGATION MODE ==========
+  #define GLOBSTAR_NOEXCEPT
+  #define GLOBSTAR_TRY
+  #define GLOBSTAR_CATCH_AND_LOG(context)
+  #define GLOBSTAR_EXCEPTION_LOG(context, ex_what) ((void)0)
+
+#endif // GLOBSTAR_NOEXCEPT_ENABLED
 
 namespace glob {
 
@@ -1984,22 +2037,34 @@ class AstConsumer {
 template<class charT>
 class ExtendedGlob {
  public:
-  ExtendedGlob(const String<charT>& pattern) {
-    Lexer<charT> l(pattern);
-    std::vector<Token<charT>> tokens = l.Scanner();
-    Parser<charT> p(std::move(tokens));
-    AstNodePtr<charT> ast_ptr = p.GenAst();
+  ExtendedGlob(const String<charT>& pattern) GLOBSTAR_NOEXCEPT {
+    GLOBSTAR_TRY {
+      Lexer<charT> l(pattern);
+      std::vector<Token<charT>> tokens = l.Scanner();
+      Parser<charT> p(std::move(tokens));
+      AstNodePtr<charT> ast_ptr = p.GenAst();
 
-    AstConsumer<charT> ast_consumer;
-    ast_consumer.GenAutomata(ast_ptr.get(), automata_);
+      AstConsumer<charT> ast_consumer;
+      ast_consumer.GenAutomata(ast_ptr.get(), automata_);
+      return; // Success
+    }
+    GLOBSTAR_CATCH_AND_LOG("ExtendedGlob::ExtendedGlob()")
+    
+    // Failure path: clear any partial state and create a safe always-fail automata
+    automata_ = Automata<charT>();  // Reset to empty state
+    size_t fail = automata_.template NewState<StateFail<charT>>();
+    automata_.SetFailState(fail);
+    size_t match = automata_.template NewState<StateMatch<charT>>();
+    automata_.SetMatchState(match);
   }
 
   ExtendedGlob(const ExtendedGlob&) = delete;
   ExtendedGlob& operator=(ExtendedGlob&) = delete;
 
-  ExtendedGlob(ExtendedGlob&& glob): automata_{std::move(glob.automata_)} {}
+  ExtendedGlob(ExtendedGlob&& glob) noexcept
+    : automata_{std::move(glob.automata_)} {}
 
-  ExtendedGlob& operator=(ExtendedGlob&& glob) {
+  ExtendedGlob& operator=(ExtendedGlob&& glob) noexcept {
     automata_ = std::move(glob.automata_);
     return *this;
   }
@@ -2021,23 +2086,35 @@ class ExtendedGlob {
 template<class charT>
 class SimpleGlob {
  public:
-  SimpleGlob(const String<charT>& pattern) {
-    Parser(pattern);
+  SimpleGlob(const String<charT>& pattern) GLOBSTAR_NOEXCEPT {
+    GLOBSTAR_TRY {
+      Parser(pattern);
+      return; // Success
+    }
+    GLOBSTAR_CATCH_AND_LOG("SimpleGlob::SimpleGlob()")
+
+    // Failure path: clear any partial state and create a safe always-fail automata
+    automata_ = Automata<charT>();  // Reset to empty state
+    size_t fail = automata_.template NewState<StateFail<charT>>();
+    automata_.SetFailState(fail);
+    size_t match = automata_.template NewState<StateMatch<charT>>();
+    automata_.SetMatchState(match);
   }
 
   SimpleGlob(const SimpleGlob&) = delete;
   SimpleGlob& operator=(SimpleGlob&) = delete;
 
-  SimpleGlob(SimpleGlob&& glob): automata_{std::move(glob.automata_)} {}
+  SimpleGlob(SimpleGlob&& glob) noexcept
+   : automata_{std::move(glob.automata_)} {}
 
-  SimpleGlob& operator=(SimpleGlob&& glob) {
+  SimpleGlob& operator=(SimpleGlob&& glob) noexcept {
     automata_ = std::move(glob.automata_);
     return *this;
   }
 
   void Parser(const String<charT>& pattern) {
     size_t pos = 0;
-    int preview_state = -1;
+    ssize_t preview_state = -1;
 
     while(pos < pattern.length()) {
       size_t current_state = 0;
@@ -2103,14 +2180,16 @@ class MatchResults;
 template<class charT, class globT=extended_glob<charT>>
 class BasicGlob {
  public:
-  BasicGlob(const String<charT>& pattern): glob_{pattern} {}
+  BasicGlob(const String<charT>& pattern) GLOBSTAR_NOEXCEPT
+   : glob_{pattern} {}
 
   BasicGlob(const BasicGlob&) = delete;
   BasicGlob& operator=(BasicGlob&) = delete;
 
-  BasicGlob(BasicGlob&& glob): glob_{std::move(glob.glob_)} {}
+  BasicGlob(BasicGlob&& glob) noexcept
+   : glob_{std::move(glob.glob_)} {}
 
-  BasicGlob& operator=(BasicGlob&& glob) {
+  BasicGlob& operator=(BasicGlob&& glob) noexcept {
     glob_ = std::move(glob.glob_);
     return *this;
   }
@@ -2120,24 +2199,28 @@ class BasicGlob {
   }
 
  private:
-  bool Exec(const String<charT>& str) {
-    return glob_.Exec(str);
+  bool Exec(const String<charT>& str) GLOBSTAR_NOEXCEPT {
+    GLOBSTAR_TRY {
+      return glob_.Exec(str);
+    }
+    GLOBSTAR_CATCH_AND_LOG("BasicGlob::Exec()")
+    return false;  // Any execution error means no match
   }
 
   template<class charU, class globU>
   friend bool glob_match(const String<charU>& str,
-      BasicGlob<charU, globU>& glob);
+      BasicGlob<charU, globU>& glob) GLOBSTAR_NOEXCEPT;
 
   template<class charU, class globU>
-  friend bool glob_match(const charU* str, BasicGlob<charU, globU>& glob);
+  friend bool glob_match(const charU* str, BasicGlob<charU, globU>& glob) GLOBSTAR_NOEXCEPT;
 
   template<class charU, class globU>
   friend bool glob_match(const String<charU>& str, MatchResults<charU>& res,
-      BasicGlob<charU, globU>& glob);
+      BasicGlob<charU, globU>& glob) GLOBSTAR_NOEXCEPT;
 
   template<class charU, class globU>
   friend bool glob_match(const charU* str, MatchResults<charU>& res,
-    BasicGlob<charU, globU>& glob);
+    BasicGlob<charU, globU>& glob) GLOBSTAR_NOEXCEPT;
 
   globT glob_;
 };
@@ -2198,45 +2281,51 @@ class MatchResults {
 
   template<class charU, class globU>
   friend bool glob_match(const String<charU>& str,
-      BasicGlob<charU, globU>& glob);
+      BasicGlob<charU, globU>& glob) GLOBSTAR_NOEXCEPT;
 
   template<class charU, class globU>
-  friend bool glob_match(const charU* str, BasicGlob<charU, globU>& glob);
+  friend bool glob_match(const charU* str, BasicGlob<charU, globU>& glob) GLOBSTAR_NOEXCEPT;
 
   template<class charU, class globU>
   friend bool glob_match(const String<charU>& str, MatchResults<charU>& res,
-      BasicGlob<charU, globU>& glob);
+      BasicGlob<charU, globU>& glob) GLOBSTAR_NOEXCEPT;
 
   template<class charU, class globU>
   friend bool glob_match(const charU* str, MatchResults<charU>& res,
-    BasicGlob<charU, globU>& glob);
+    BasicGlob<charU, globU>& glob) GLOBSTAR_NOEXCEPT;
 
   std::vector<String<charT>> results_;
 };
 
 template<class charT, class globT=extended_glob<charT>>
-bool glob_match(const String<charT>& str, BasicGlob<charT, globT>& glob) {
+bool glob_match(const String<charT>& str, BasicGlob<charT, globT>& glob) GLOBSTAR_NOEXCEPT {
   return glob.Exec(str);
 }
 
 template<class charT, class globT=extended_glob<charT>>
-bool glob_match(const charT* str, BasicGlob<charT, globT>& glob) {
+bool glob_match(const charT* str, BasicGlob<charT, globT>& glob) GLOBSTAR_NOEXCEPT {
   return glob.Exec(str);
 }
 
 template<class charT, class globT=extended_glob<charT>>
 bool glob_match(const String<charT>& str, MatchResults<charT>& res,
-    BasicGlob<charT, globT>& glob) {
+    BasicGlob<charT, globT>& glob) GLOBSTAR_NOEXCEPT {
   bool r = glob.Exec(str);
-  res.SetResults(glob.GetAutomata().GetMatchedStrings());
+  GLOBSTAR_TRY {
+      res.SetResults(glob.GetAutomata().GetMatchedStrings());
+  }
+  GLOBSTAR_CATCH_AND_LOG("glob_match() - SetResults")
   return r;
 }
 
 template<class charT, class globT=extended_glob<charT>>
 bool glob_match(const charT* str, MatchResults<charT>& res,
-    BasicGlob<charT, globT>& glob) {
+    BasicGlob<charT, globT>& glob) GLOBSTAR_NOEXCEPT {
   bool r = glob.Exec(str);
-  res.SetResults(glob.GetAutomata().GetMatchedStrings());
+  GLOBSTAR_TRY {
+    res.SetResults(glob.GetAutomata().GetMatchedStrings());
+  }
+  GLOBSTAR_CATCH_AND_LOG("glob_match() - SetResults")
   return r;
 }
 
