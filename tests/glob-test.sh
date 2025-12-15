@@ -664,6 +664,53 @@ test_glob_brace "*.{h,hpp,c,cpp}" "file.txt" "false" "BraceExpansionMultipleItem
 test_glob_brace "*.{h,hpp,c,cpp}" "file.hh" "false" "BraceExpansionMultipleItems: *.{h,hpp,c,cpp} does not match file.hh"
 echo ""
 
+# Test: BraceExpansionGreedyMatching (CRITICAL TEST!)
+echo "Test: BraceExpansionGreedyMatching"
+test_glob_brace "*.{c,cp,cpp}" "file.c" "true" "BraceExpansionGreedyMatching: *.{c,cp,cpp} matches file.c (shortest when only option)"
+test_glob_brace "*.{c,cp,cpp}" "file.cp" "true" "BraceExpansionGreedyMatching: *.{c,cp,cpp} matches file.cp (greedy: matches cp not just c)"
+test_glob_brace "*.{c,cp,cpp}" "file.cpp" "true" "BraceExpansionGreedyMatching: *.{c,cp,cpp} matches file.cpp (longest match)"
+test_glob_brace "*.{c,cp,cpp}" "file.cxx" "false" "BraceExpansionGreedyMatching: *.{c,cp,cpp} does not match file.cxx"
+echo ""
+
+# Test: BraceExpansionComplexList
+echo "Test: BraceExpansionComplexList"
+test_glob_brace "*.{h,hp,hpp,hxx,c,cc,cp,cpp,cxx}" "foo.h" "true" "BraceExpansionComplexList: Complex list matches foo.h"
+test_glob_brace "*.{h,hp,hpp,hxx,c,cc,cp,cpp,cxx}" "foo.hp" "true" "BraceExpansionComplexList: Complex list matches foo.hp"
+test_glob_brace "*.{h,hp,hpp,hxx,c,cc,cp,cpp,cxx}" "foo.hpp" "true" "BraceExpansionComplexList: Complex list matches foo.hpp"
+test_glob_brace "*.{h,hp,hpp,hxx,c,cc,cp,cpp,cxx}" "foo.hxx" "true" "BraceExpansionComplexList: Complex list matches foo.hxx"
+test_glob_brace "*.{h,hp,hpp,hxx,c,cc,cp,cpp,cxx}" "foo.c" "true" "BraceExpansionComplexList: Complex list matches foo.c"
+test_glob_brace "*.{h,hp,hpp,hxx,c,cc,cp,cpp,cxx}" "foo.cc" "true" "BraceExpansionComplexList: Complex list matches foo.cc"
+test_glob_brace "*.{h,hp,hpp,hxx,c,cc,cp,cpp,cxx}" "foo.cp" "true" "BraceExpansionComplexList: Complex list matches foo.cp (CRITICAL!)"
+test_glob_brace "*.{h,hp,hpp,hxx,c,cc,cp,cpp,cxx}" "foo.cpp" "true" "BraceExpansionComplexList: Complex list matches foo.cpp"
+test_glob_brace "*.{h,hp,hpp,hxx,c,cc,cp,cpp,cxx}" "foo.cxx" "true" "BraceExpansionComplexList: Complex list matches foo.cxx"
+test_glob_brace "*.{h,hp,hpp,hxx,c,cc,cp,cpp,cxx}" "foo.java" "false" "BraceExpansionComplexList: Complex list does not match foo.java"
+echo ""
+
+# Test: BraceExpansionRanges
+echo "Test: BraceExpansionRanges"
+test_glob_brace "file{1..3}.txt" "file1.txt" "true" "BraceExpansionRanges: file{1..3}.txt matches file1.txt"
+test_glob_brace "file{1..3}.txt" "file2.txt" "true" "BraceExpansionRanges: file{1..3}.txt matches file2.txt"
+test_glob_brace "file{1..3}.txt" "file3.txt" "true" "BraceExpansionRanges: file{1..3}.txt matches file3.txt"
+test_glob_brace "file{1..3}.txt" "file0.txt" "false" "BraceExpansionRanges: file{1..3}.txt does not match file0.txt"
+test_glob_brace "file{1..3}.txt" "file4.txt" "false" "BraceExpansionRanges: file{1..3}.txt does not match file4.txt"
+echo ""
+
+# Test: BraceExpansionCharRange
+echo "Test: BraceExpansionCharRange"
+test_glob_brace "test{a..c}.log" "testa.log" "true" "BraceExpansionCharRange: test{a..c}.log matches testa.log"
+test_glob_brace "test{a..c}.log" "testb.log" "true" "BraceExpansionCharRange: test{a..c}.log matches testb.log"
+test_glob_brace "test{a..c}.log" "testc.log" "true" "BraceExpansionCharRange: test{a..c}.log matches testc.log"
+test_glob_brace "test{a..c}.log" "testd.log" "false" "BraceExpansionCharRange: test{a..c}.log does not match testd.log"
+echo ""
+
+# Test: BraceExpansionReverseRange
+echo "Test: BraceExpansionReverseRange"
+test_glob_brace "file{5..1}.txt" "file5.txt" "true" "BraceExpansionReverseRange: file{5..1}.txt matches file5.txt"
+test_glob_brace "file{5..1}.txt" "file3.txt" "true" "BraceExpansionReverseRange: file{5..1}.txt matches file3.txt"
+test_glob_brace "file{5..1}.txt" "file1.txt" "true" "BraceExpansionReverseRange: file{5..1}.txt matches file1.txt"
+test_glob_brace "file{5..1}.txt" "file0.txt" "false" "BraceExpansionReverseRange: file{5..1}.txt does not match file0.txt"
+echo ""
+
 # Test: BraceExpansionWithPrefix
 echo "Test: BraceExpansionWithPrefix"
 test_glob_brace "test.{txt,md}" "test.txt" "true" "BraceExpansionWithPrefix: test.{txt,md} matches test.txt"
@@ -714,6 +761,35 @@ test_glob_brace "{a,b{1,2}}*.txt" "b2.txt" "true" "BraceExpansionNestedComplex: 
 test_glob_brace "{a,b{1,2}}*.txt" "afile.txt" "true" "BraceExpansionNestedComplex: {a,b{1,2}}*.txt matches afile.txt"
 test_glob_brace "{a,b{1,2}}*.txt" "b1test.txt" "true" "BraceExpansionNestedComplex: {a,b{1,2}}*.txt matches b1test.txt"
 test_glob_brace "{a,b{1,2}}*.txt" "b.txt" "false" "BraceExpansionNestedComplex: {a,b{1,2}}*.txt does not match b.txt"
+echo ""
+
+# Test: BraceExpansionNestedPaths
+echo "Test: BraceExpansionNestedPaths"
+test_glob_brace "{test,prod}/{log,data}.txt" "test/log.txt" "true" "BraceExpansionNestedPaths: {test,prod}/{log,data}.txt matches test/log.txt"
+test_glob_brace "{test,prod}/{log,data}.txt" "test/data.txt" "true" "BraceExpansionNestedPaths: {test,prod}/{log,data}.txt matches test/data.txt"
+test_glob_brace "{test,prod}/{log,data}.txt" "prod/log.txt" "true" "BraceExpansionNestedPaths: {test,prod}/{log,data}.txt matches prod/log.txt"
+test_glob_brace "{test,prod}/{log,data}.txt" "prod/data.txt" "true" "BraceExpansionNestedPaths: {test,prod}/{log,data}.txt matches prod/data.txt"
+test_glob_brace "{test,prod}/{log,data}.txt" "dev/log.txt" "false" "BraceExpansionNestedPaths: {test,prod}/{log,data}.txt does not match dev/log.txt"
+echo ""
+
+# Test: BraceExpansionMultipleRanges
+echo "Test: BraceExpansionMultipleRanges"
+test_glob_brace "file{1..2}{a..b}.txt" "file1a.txt" "true" "BraceExpansionMultipleRanges: file{1..2}{a..b}.txt matches file1a.txt"
+test_glob_brace "file{1..2}{a..b}.txt" "file1b.txt" "true" "BraceExpansionMultipleRanges: file{1..2}{a..b}.txt matches file1b.txt"
+test_glob_brace "file{1..2}{a..b}.txt" "file2a.txt" "true" "BraceExpansionMultipleRanges: file{1..2}{a..b}.txt matches file2a.txt"
+test_glob_brace "file{1..2}{a..b}.txt" "file2b.txt" "true" "BraceExpansionMultipleRanges: file{1..2}{a..b}.txt matches file2b.txt"
+test_glob_brace "file{1..2}{a..b}.txt" "file1c.txt" "false" "BraceExpansionMultipleRanges: file{1..2}{a..b}.txt does not match file1c.txt"
+echo ""
+
+# Test: BraceExpansionComplexNested
+echo "Test: BraceExpansionComplexNested"
+test_glob_brace "{a,b}{c{d,e},f}" "acd" "true" "BraceExpansionComplexNested: {a,b}{c{d,e},f} matches acd"
+test_glob_brace "{a,b}{c{d,e},f}" "ace" "true" "BraceExpansionComplexNested: {a,b}{c{d,e},f} matches ace"
+test_glob_brace "{a,b}{c{d,e},f}" "af" "true" "BraceExpansionComplexNested: {a,b}{c{d,e},f} matches af"
+test_glob_brace "{a,b}{c{d,e},f}" "bcd" "true" "BraceExpansionComplexNested: {a,b}{c{d,e},f} matches bcd"
+test_glob_brace "{a,b}{c{d,e},f}" "bce" "true" "BraceExpansionComplexNested: {a,b}{c{d,e},f} matches bce"
+test_glob_brace "{a,b}{c{d,e},f}" "bf" "true" "BraceExpansionComplexNested: {a,b}{c{d,e},f} matches bf"
+test_glob_brace "{a,b}{c{d,e},f}" "ac" "false" "BraceExpansionComplexNested: {a,b}{c{d,e},f} does not match ac"
 echo ""
 
 # Test: BraceExpansionEmptyBraces
@@ -832,6 +908,60 @@ test_glob_brace "?{a,b}.txt" "xa.txt" "true" "?{a,b}.txt matches xa.txt"
 test_glob_brace "?{a,b}.txt" "xb.txt" "true" "?{a,b}.txt matches xb.txt"
 test_glob_brace "{a,b}*.txt" "a123.txt" "true" "{a,b}*.txt matches a123.txt"
 test_glob_brace "{a,b}*.txt" "b.txt" "true" "{a,b}*.txt matches b.txt"
+echo ""
+
+# ============================================================================
+# CONTEXT-AWARE TOKENIZATION TESTS
+# ============================================================================
+
+echo "Test: Context-Aware - Comma"
+test_glob "foo,bar" "foo,bar" "true" "Comma outside braces is literal"
+test_glob "foo,bar" "foo" "false" "Comma outside braces doesn't separate"
+test_glob "foo,bar" "foobar" "false" "Comma is not optional"
+test_glob "*,*" "a,b" "true" "Comma literal with wildcards"
+test_glob "*,*" "ab" "false" "Comma required when literal"
+echo ""
+
+echo "Test: Context-Aware - Pipe"
+test_glob "foo|bar" "foo|bar" "true" "Pipe outside parens is literal"
+test_glob "foo|bar" "foo" "false" "Pipe outside parens doesn't separate"
+test_glob "foo|bar" "bar" "false" "Pipe outside parens doesn't separate"
+test_glob "*|*" "a|b" "true" "Pipe literal with wildcards"
+test_glob "*|*" "ab" "false" "Pipe required when literal"
+echo ""
+
+echo "Test: Context-Aware - Double Dot"
+test_glob "test..txt" "test..txt" "true" "Double dot outside braces is literal"
+test_glob "test..txt" "test.txt" "false" "Double dot doesn't match single dot"
+test_glob "test..txt" "testXtxt" "false" "Double dot is not a wildcard"
+test_glob "*.." "file.." "true" "Double dot at end is literal"
+test_glob "..txt" "..txt" "true" "Double dot at start is literal"
+echo ""
+
+echo "Test: Context-Aware - Hyphen/Dash"
+test_glob "foo-bar" "foo-bar" "true" "Hyphen outside brackets is literal"
+test_glob "foo-bar" "foobar" "false" "Hyphen is not optional"
+test_glob "*-*" "a-b" "true" "Hyphen literal with wildcards"
+test_glob "test-[0-9]" "test-5" "true" "Hyphen literal before bracket, range inside"
+test_glob "test-[0-9]" "test5" "false" "Hyphen required before bracket"
+echo ""
+
+echo "Test: Context-Aware - Plus"
+test_glob "foo+bar" "foo+bar" "true" "Plus without parens is literal"
+test_glob "foo+bar" "foobar" "false" "Plus is not optional"
+test_glob "*+*" "a+b" "true" "Plus literal with wildcards"
+echo ""
+
+echo "Test: Context-Aware - At Symbol"
+test_glob "user@host" "user@host" "true" "At symbol without parens is literal"
+test_glob "user@host" "userhost" "false" "At symbol is not optional"
+test_glob "*@*" "a@b" "true" "At symbol literal with wildcards"
+echo ""
+
+echo "Test: Context-Aware - Exclamation"
+test_glob "wow!" "wow!" "true" "Exclamation without parens is literal"
+test_glob "wow!" "wow" "false" "Exclamation is not optional"
+test_glob "*!" "test!" "true" "Exclamation literal with wildcards"
 echo ""
 
 # ============================================================================
