@@ -1,5 +1,13 @@
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.5)
 project(glob-cpp VERSION 1.0.0)
+
+# Set policies to suppress warnings
+if(POLICY CMP0167)
+  cmake_policy(SET CMP0167 OLD)  # Use FindBoost module (not removed yet)
+endif()
+if(POLICY CMP0135)
+  cmake_policy(SET CMP0135 NEW)  # Use DOWNLOAD_EXTRACT_TIMESTAMP
+endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 

@@ -52,6 +52,7 @@ ExternalProject_Add(googletest
     PREFIX googletest
     URL ${googletest_URL}
     DOWNLOAD_DIR "${DOWNLOAD_LOCATION}"
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     BUILD_IN_SOURCE 1
     # BUILD_BYPRODUCTS ${googletest_STATIC_LIBRARIES} ${googletest_MAIN_STATIC_LIBRARIES}
     INSTALL_COMMAND ""
