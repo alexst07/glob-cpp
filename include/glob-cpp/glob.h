@@ -258,6 +258,7 @@ class Automata {
         std::forward<Args>(args)...));
 
     states_.push_back(std::move(state));
+
     return state_pos;
   }
 
@@ -276,31 +277,43 @@ class Automata {
     }
 
     // If we've consumed the entire string but haven't reached match or fail state,
-    // check if we're at a star state that can transition to MATCH (for patterns ending with *)
+    // check if we're at a state that can transition to MATCH without consuming more input
     if (str_pos == str.length() && state_pos != fail_state_ && state_pos != match_state_) {
-      const State<charT>& current_state = *states_[state_pos];
-      if (current_state.Type() == StateType::MULT) {
-        // Check if this star state has MATCH as its next state (index 1)
+      State<charT>& current_state = *states_[state_pos];
+      StateType state_type = current_state.Type();
+      
+      if (state_type == StateType::MULT) {
+        // Handle star state: check if it has MATCH as its next state (index 1)
         const auto& next_states = current_state.GetNextStates();
         if (next_states.size() > 1 && states_[next_states[1]]->Type() == StateType::MATCH) {
           state_pos = next_states[1];
+        }
+      } else if (state_type == StateType::GROUP) {
+        // Handle group state: it may match empty alternative (e.g., {,.bak})
+        // Call Next() which is safe for StateGroup
+        size_t next_state_pos, next_str_pos;
+        std::tie(next_state_pos, next_str_pos) = current_state.Next(str, str_pos);
+        
+        // If the transition goes to match state or doesn't consume input, take it
+        if (next_state_pos == match_state_ || next_str_pos == str_pos) {
+          state_pos = next_state_pos;
+          str_pos = next_str_pos;
         }
       }
     }
 
     // if comp_end is true it matches only if the automata reached the end of
     // the string
+    bool result = false;
     if (comp_end) {
-      if ((state_pos == match_state_) && (str_pos == str.length())) {
-        return std::tuple<bool, size_t>(state_pos == match_state_, str_pos);
-      }
-
-      return std::tuple<bool, size_t>(false, str_pos);
+      result = (state_pos == match_state_) && (str_pos == str.length());
     } else {
       // if comp_end is false, compare only if the states reached the
       // match state
-      return std::tuple<bool, size_t>(state_pos == match_state_, str_pos);
+      result = (state_pos == match_state_);
     }
+    
+    return std::tuple<bool, size_t>(result, str_pos);
   }
 
   void ResetStates() {
@@ -353,7 +366,7 @@ class StateAny : public State<charT> {
 
   bool Check(const String<charT>& str, size_t pos) override {
     (void)str; (void)pos;
-    // as it match any char, it is always trye
+    // as it match any char, it is always true
     return true;
   }
 
@@ -515,24 +528,37 @@ class StateGroup: public State<charT> {
   std::tuple<bool, size_t> BasicCheck(const String<charT>& str,
       size_t pos) {
     String<charT> str_part = str.substr(pos);
-    bool r;
-    size_t str_pos = 0;
-
-    // each automata is a part of a union of the group, in basic check,
-    // we want find only if any automata is true
-    // For top-level unions (pos == 0), require full string matching
-    bool comp_end = (pos == 0);
+    
+    bool any_match = false;
+    size_t longest_match_pos = 0;
     
     for (auto& automata : automatas_) {
-      std::tie(r, str_pos) = automata->Exec(str_part, comp_end);
+      bool r;
+      size_t str_pos;
+      std::tie(r, str_pos) = automata->Exec(str_part, false);
+      
       if (r) {
-        return std::tuple<bool, size_t>(r, pos + str_pos);
+        any_match = true;
+        // Keep track of the longest match
+        if (str_pos > longest_match_pos) {
+          longest_match_pos = str_pos;
+            
+          // If we consumed all remaining characters,
+          // we can't find a longer match, so stop here
+          if (longest_match_pos == str_part.length()) {
+            break;
+          }
+        }
       }
     }
 
-    return std::tuple<bool, size_t>(false, pos + str_pos);
+    if (any_match) {
+      return std::tuple<bool, size_t>(true, pos + longest_match_pos);
+    }
+    
+    return std::tuple<bool, size_t>(false, pos);
   }
-
+  
   bool Check(const String<charT>& str, size_t pos) override {
     switch (type_) {
       case Type::BASIC:
@@ -594,24 +620,46 @@ class StateGroup: public State<charT> {
   }
 
   std::tuple<size_t, size_t> NextNeg(const String<charT>& str, size_t pos) {
-    bool r;
-    size_t new_pos;
-    std::tie(r, new_pos) = BasicCheck(str, pos);
-    if (r) {
-      this->SetMatchedStr(this->MatchedStr() + str.substr(pos, new_pos - pos));
-      return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
-    }
-
-    return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
+      if (pos >= str.length()) {
+          return std::tuple<size_t, size_t>(GetAutomata().FailState(), pos);
+      }
+  
+      bool any_match = false;
+      size_t longest_failed = 0;
+  
+      for (auto& automata : automatas_) {
+          bool r;
+          size_t consumed;
+          std::tie(r, consumed) = automata->Exec(str.substr(pos), false);
+  
+          if (r) {
+              any_match = true;
+              // Can early-exit: one match fails the whole negation
+              break;
+          }
+          // Track longest prefix that failed this alternative
+          if (consumed > longest_failed) {
+              longest_failed = consumed;
+          }
+      }
+  
+      if (any_match) {
+          return std::tuple<size_t, size_t>(GetAutomata().FailState(), pos);
+      }
+  
+      // None matched - negation succeeds, consume longest failed prefix
+      // For char classes = 1, for strings = length until mismatch
+      this->SetMatchedStr(str.substr(pos, longest_failed));
+      return std::tuple<size_t, size_t>(GetNextStates()[0], pos + longest_failed);  // 0 for non-repeating NEGATIVE groups: !(...)
   }
-
+  
   std::tuple<size_t, size_t> NextBasic(const String<charT>& str, size_t pos) {
     bool r;
     size_t new_pos;
     std::tie(r, new_pos) = BasicCheck(str, pos);
     if (r) {
       this->SetMatchedStr(this->MatchedStr() + str.substr(pos, new_pos - pos));
-      return std::tuple<size_t, size_t>(GetNextStates()[1], new_pos);
+      return std::tuple<size_t, size_t>(GetNextStates()[0], new_pos); // 0 for non-repeating BASIC/AT groups: {a,b,c} @(...)
     }
 
     return std::tuple<size_t, size_t>(GetAutomata().FailState(), new_pos);
@@ -748,7 +796,7 @@ class Lexer {
  public:
   static const char kEndOfInput = -1;
 
-  Lexer(const String<charT>& str): str_(str), pos_{0}, c_{str[0]} {}
+  Lexer(const String<charT>& str): str_(str), c_{str[0]} {}
 
   std::vector<Token<charT>> Scanner() {
     std::vector<Token<charT>> tokens;
@@ -757,6 +805,7 @@ class Lexer {
         case '?': {
           Advance();
           if (c_ == '(') {
+            paren_depth_++;
             tokens.push_back(Select(TokenKind::QUESTLPAREN));
             Advance();
           } else {
@@ -768,6 +817,7 @@ class Lexer {
         case '*': {
           Advance();
           if (c_ == '(') {
+            paren_depth_++;
             tokens.push_back(Select(TokenKind::STARLPAREN));
             Advance();
           } else {
@@ -776,9 +826,26 @@ class Lexer {
           break;
         }
 
+		case '{': {
+          brace_depth_++;
+          tokens.push_back(Select(TokenKind::LBRACE));
+          Advance();
+          break;
+        }
+
+        case '}': {
+          if (brace_depth_ > 0) {
+            brace_depth_--;
+          }
+          tokens.push_back(Select(TokenKind::RBRACE));
+          Advance();
+          break;
+        }
+        
         case '+': {
           Advance();
           if (c_ == '(') {
+            paren_depth_++;
             tokens.push_back(Select(TokenKind::PLUSLPAREN));
             Advance();
           } else {
@@ -788,20 +855,42 @@ class Lexer {
         }
 
         case '-': {
-          tokens.push_back(Select(TokenKind::SUB));
+          // Only SUB inside brackets, otherwise regular char
+          if (bracket_depth_ > 0) {
+            tokens.push_back(Select(TokenKind::SUB));
+          } else {
+            tokens.push_back(Select(TokenKind::CHAR, '-'));
+          }
           Advance();
           break;
         }
 
         case '|': {
-          tokens.push_back(Select(TokenKind::UNION));
+          // Only UNION inside parentheses, otherwise regular char
+          if (paren_depth_ > 0) {
+            tokens.push_back(Select(TokenKind::UNION));
+          } else {
+            tokens.push_back(Select(TokenKind::CHAR, '|'));
+          }
           Advance();
           break;
         }
-
+        
+        case ',': {
+          // Only UNION inside braces, otherwise regular char
+          if (brace_depth_ > 0) {
+            tokens.push_back(Select(TokenKind::UNION));
+          } else {
+            tokens.push_back(Select(TokenKind::CHAR, ','));
+          }
+          Advance();
+          break;
+        }
+        
         case '@': {
           Advance();
           if (c_ == '(') {
+            paren_depth_++;
             tokens.push_back(Select(TokenKind::ATLPAREN));
             Advance();
           } else {
@@ -813,6 +902,7 @@ class Lexer {
         case '!': {
           Advance();
           if (c_ == '(') {
+            paren_depth_++;
             tokens.push_back(Select(TokenKind::NEGLPAREN));
             Advance();
           } else {
@@ -822,18 +912,23 @@ class Lexer {
         }
 
         case '(': {
+          paren_depth_++;
           tokens.push_back(Select(TokenKind::LPAREN));
           Advance();
           break;
         }
 
         case ')': {
+          if (paren_depth_ > 0) {
+            paren_depth_--;
+          }
           tokens.push_back(Select(TokenKind::RPAREN));
           Advance();
           break;
         }
 
         case '[': {
+          bracket_depth_++;
           Advance();
           if (c_ == '!') {
             tokens.push_back(Select(TokenKind::NEGLBRACKET));
@@ -845,23 +940,33 @@ class Lexer {
         }
 
         case ']': {
+          if (bracket_depth_ > 0) {
+                bracket_depth_--;
+          }
           tokens.push_back(Select(TokenKind::RBRACKET));
           Advance();
           break;
         }
 
-        case '{': {
-          tokens.push_back(Select(TokenKind::LBRACE));
-          Advance();
+		case '.': {
+          // Only treat '..' as DOTDOT if we're inside braces
+          if (brace_depth_ > 0) {
+            Advance();
+            if (c_ == '.') {
+              tokens.push_back(Select(TokenKind::DOTDOT));
+              Advance();
+            } else {
+              // Single '.' inside braces is still a regular character
+              tokens.push_back(Select(TokenKind::CHAR, '.'));
+            }
+          } else {
+            // Outside braces, '.' is always just a regular character
+            tokens.push_back(Select(TokenKind::CHAR, '.'));
+            Advance();
+          }
           break;
         }
-
-        case '}': {
-          tokens.push_back(Select(TokenKind::RBRACE));
-          Advance();
-          break;
-        }
-
+        
         case '\\': {
           Advance();
           if (c_ == kEndOfInput) {
@@ -915,6 +1020,7 @@ class Lexer {
              c == '|' ||
              c == '!' ||
              c == '@' ||
+             c == ',' ||
              c == '{' ||
              c == '}' ||
              c == '\\';
@@ -922,8 +1028,11 @@ class Lexer {
   }
 
   String<charT> str_;
-  size_t pos_;
+  size_t pos_ = 0;
   charT c_;
+  int brace_depth_ = 0; // tracks {} nesting
+  int paren_depth_ = 0; // tracks () nesting
+  int bracket_depth_ = 0; // tracks [] nesting
 };
 
 
@@ -1222,85 +1331,6 @@ class Parser {
   }
 
  private:
-  AstNodePtr<charT> CloneNode(AstNode<charT>* node) {
-    if (!node) {
-      return nullptr;
-    }
-
-    switch (node->GetType()) {
-      case AstNode<charT>::Type::CHAR: {
-        CharNode<charT>* char_node = static_cast<CharNode<charT>*>(node);
-        return AstNodePtr<charT>(new CharNode<charT>(char_node->GetValue()));
-      }
-
-      case AstNode<charT>::Type::STAR: {
-        return AstNodePtr<charT>(new StarNode<charT>());
-      }
-
-      case AstNode<charT>::Type::ANY: {
-        return AstNodePtr<charT>(new AnyNode<charT>());
-      }
-
-      case AstNode<charT>::Type::CONCAT_GLOB: {
-        ConcatNode<charT>* concat_node = static_cast<ConcatNode<charT>*>(node);
-        std::vector<AstNodePtr<charT>> cloned_parts;
-        for (auto& part : concat_node->GetBasicGlobs()) {
-          cloned_parts.push_back(CloneNode(part.get()));
-        }
-        return AstNodePtr<charT>(new ConcatNode<charT>(std::move(cloned_parts)));
-      }
-
-      case AstNode<charT>::Type::UNION: {
-        UnionNode<charT>* union_node = static_cast<UnionNode<charT>*>(node);
-        std::vector<AstNodePtr<charT>> cloned_items;
-        for (auto& item : union_node->GetItems()) {
-          cloned_items.push_back(CloneNode(item.get()));
-        }
-        return AstNodePtr<charT>(new UnionNode<charT>(std::move(cloned_items)));
-      }
-
-      case AstNode<charT>::Type::POS_SET: {
-        PositiveSetNode<charT>* pos_set = static_cast<PositiveSetNode<charT>*>(node);
-        return AstNodePtr<charT>(new PositiveSetNode<charT>(CloneNode(pos_set->GetSet())));
-      }
-
-      case AstNode<charT>::Type::NEG_SET: {
-        NegativeSetNode<charT>* neg_set = static_cast<NegativeSetNode<charT>*>(node);
-        return AstNodePtr<charT>(new NegativeSetNode<charT>(CloneNode(neg_set->GetSet())));
-      }
-
-      case AstNode<charT>::Type::SET_ITEMS: {
-        SetItemsNode<charT>* set_items = static_cast<SetItemsNode<charT>*>(node);
-        std::vector<AstNodePtr<charT>> cloned_items;
-        for (auto& item : set_items->GetItems()) {
-          cloned_items.push_back(CloneNode(item.get()));
-        }
-        return AstNodePtr<charT>(new SetItemsNode<charT>(std::move(cloned_items)));
-      }
-
-      case AstNode<charT>::Type::RANGE: {
-        RangeNode<charT>* range_node = static_cast<RangeNode<charT>*>(node);
-        return AstNodePtr<charT>(new RangeNode<charT>(
-            CloneNode(range_node->GetStart()),
-            CloneNode(range_node->GetEnd())));
-      }
-
-      case AstNode<charT>::Type::GROUP: {
-        GroupNode<charT>* group_node = static_cast<GroupNode<charT>*>(node);
-        return AstNodePtr<charT>(new GroupNode<charT>(
-            group_node->GetGroupType(),
-            CloneNode(group_node->GetGlob())));
-      }
-
-      case AstNode<charT>::Type::SET_ITEM:
-      case AstNode<charT>::Type::SET:
-      case AstNode<charT>::Type::GLOB:
-        // These should not appear in brace expansion context
-        throw Error("Unsupported node type for cloning in brace expansion");
-        break;
-    }
-    return nullptr;
-  }
   AstNodePtr<charT> ParserChar() {
     Token<charT>& tk = NextToken();
     if (tk != TokenKind::CHAR) {
@@ -1393,6 +1423,10 @@ class Parser {
         return ParserGroup();
         break;
 
+      case TokenKind::LBRACE:
+        return ParserBraceGroup();
+        break;
+
       default:
         throw Error("basic glob expected");
         break;
@@ -1442,115 +1476,164 @@ class Parser {
     return AstNodePtr<charT>(new GroupNode<charT>(type, std::move(group_glob)));
   }
 
-  std::vector<AstNodePtr<charT>> ParserBraceExpansion() {
+  AstNodePtr<charT> ParserBraceGroup() {
     Token<charT>& tk = NextToken();
     if (tk != TokenKind::LBRACE) {
-      throw Error("Expected '{' at start of brace expansion");
+      throw Error("Expected '{'");
     }
 
-    std::vector<AstNodePtr<charT>> items;
+    AstNodePtr<charT> group_content = ParserBraceUnion();
     
-    // Handle empty braces {}
-    if (GetToken() == TokenKind::RBRACE) {
-      NextToken(); // consume RBRACE
-      // Return empty item (empty string)
-      items.push_back(AstNodePtr<charT>(new ConcatNode<charT>(std::vector<AstNodePtr<charT>>())));
-      return items;
-    }
-
-    // Parse first item (can contain nested braces)
-    items.push_back(ParserBraceItem());
-
-    // Parse remaining items separated by commas
-    while (true) {
-      Token<charT>& current_tk = GetToken();
-      
-      // Check if we've reached the closing brace
-      if (current_tk == TokenKind::RBRACE) {
-        break;
-      }
-      
-      // Expect a comma before the next item
-      if (current_tk != TokenKind::CHAR || current_tk.Value() != ',') {
-        throw Error("Expected ',' or '}' in brace expansion");
-      }
-      
-      Advance(); // consume comma
-      
-      // Check for trailing comma before closing brace
-      if (GetToken() == TokenKind::RBRACE) {
-        // Trailing comma - add empty item
-        items.push_back(AstNodePtr<charT>(new ConcatNode<charT>(std::vector<AstNodePtr<charT>>())));
-        break;
-      }
-      
-      items.push_back(ParserBraceItem());
-    }
-
     tk = NextToken();
     if (tk != TokenKind::RBRACE) {
-      throw Error("Expected '}' at end of brace expansion");
+      throw Error("Expected '}' at end of brace group");
     }
 
-    return items;
+    // Treat brace groups as BASIC groups (matches if any alternative matches)
+    return AstNodePtr<charT>(new GroupNode<charT>(
+        GroupNode<charT>::GroupType::BASIC, std::move(group_content)));
   }
 
-  AstNodePtr<charT> ParserBraceItem() {
-    auto check_end = [&]() -> bool {
-      if (pos_ >= tok_vec_.size()) {
-        return true; // End of tokens
+  AstNodePtr<charT> ParserBraceUnion() {
+    std::vector<AstNodePtr<charT>> items;
+    
+    // Parse first item
+    AstNodePtr<charT> first_item = ParserBraceItem();
+    
+    // If it's a UnionNode (from range expansion), flatten its alternatives
+    if (first_item->GetType() == AstNode<charT>::Type::UNION) {
+      UnionNode<charT>* union_node = static_cast<UnionNode<charT>*>(first_item.get());
+      // Move all alternatives from the nested union into our items vector
+      for (auto& item : union_node->GetItems()) {
+        items.push_back(std::move(item));
       }
+    } else {
+      items.push_back(std::move(first_item));
+    }
+
+    // Parse additional comma-separated items
+    while (GetToken() == TokenKind::UNION) {
+      Advance();
+      AstNodePtr<charT> item = ParserBraceItem();
       
-      Token<charT>& tk = GetToken();
-
-      switch (tk.Kind()) {
-        case TokenKind::EOS:
-        case TokenKind::RPAREN:
-        case TokenKind::UNION:
-        case TokenKind::RBRACE:
-          return true;
-          break;
-
-        case TokenKind::CHAR:
-          // Comma ends the item
-          if (tk.Value() == ',') {
-            return true;
-          }
-          return false;
-          break;
-
-        default:
-          return false;
-          break;
+      // Flatten any UnionNodes from range expansion
+      if (item->GetType() == AstNode<charT>::Type::UNION) {
+        UnionNode<charT>* union_node = static_cast<UnionNode<charT>*>(item.get());
+        for (auto& inner_item : union_node->GetItems()) {
+          items.push_back(std::move(inner_item));
+        }
+      } else {
+        items.push_back(std::move(item));
       }
+    }
+
+    return AstNodePtr<charT>(new UnionNode<charT>(std::move(items)));
+  }
+  
+  AstNodePtr<charT> ParserBraceItem() {
+    // Check if this is a range expression (e.g., a..z)
+    if (GetToken() == TokenKind::CHAR && PeekAhead() == TokenKind::DOTDOT) {
+      return ParserBraceRange();
+    }
+    
+    // Otherwise parse as concatenated characters within this alternative
+    return ParserBraceConcat();
+  }
+
+  AstNodePtr<charT> ParserBraceRange() {
+    Token<charT>& start_tk = NextToken();
+    if (start_tk != TokenKind::CHAR) {
+      throw Error("Expected character for range start");
+    }
+    charT start_char = start_tk.Value();
+
+    Token<charT>& dotdot = NextToken();
+    if (dotdot != TokenKind::DOTDOT) {
+      throw Error("Expected '..' in range");
+    }
+
+    Token<charT>& end_tk = NextToken();
+    if (end_tk != TokenKind::CHAR) {
+      throw Error("Expected character for range end");
+    }
+    charT end_char = end_tk.Value();
+
+    // Expand the range into a union of individual alternatives
+    std::vector<AstNodePtr<charT>> alternatives;
+    
+    // Determine direction and iterate
+    if (start_char <= end_char) {
+      for (charT c = start_char; c <= end_char; ++c) {
+        std::vector<AstNodePtr<charT>> single_char;
+        single_char.push_back(AstNodePtr<charT>(new CharNode<charT>(c)));
+        alternatives.push_back(AstNodePtr<charT>(
+            new ConcatNode<charT>(std::move(single_char))));
+      }
+    } else {
+      for (charT c = start_char; c >= end_char; --c) {
+        std::vector<AstNodePtr<charT>> single_char;
+        single_char.push_back(AstNodePtr<charT>(new CharNode<charT>(c)));
+        alternatives.push_back(AstNodePtr<charT>(
+            new ConcatNode<charT>(std::move(single_char))));
+      }
+    }
+
+    return AstNodePtr<charT>(new UnionNode<charT>(std::move(alternatives)));
+  }
+
+  AstNodePtr<charT> ParserBraceConcat() {
+    auto is_brace_terminator = [&]() -> bool {
+      Token<charT>& tk = GetToken();
+      return tk == TokenKind::RBRACE || 
+             tk == TokenKind::UNION || 
+             tk == TokenKind::EOS;
     };
 
     std::vector<AstNodePtr<charT>> parts;
 
-    while (!check_end()) {
+    while (!is_brace_terminator()) {
+      // Only allow basic glob patterns within brace alternatives
       Token<charT>& tk = GetToken();
       
-      // Handle nested braces - create a union node
-      if (tk == TokenKind::LBRACE) {
-        // Parse nested brace expansion
-        std::vector<AstNodePtr<charT>> nested_items = ParserBraceExpansion();
-        
-        // For nested braces, create a union node
-        // The expansion logic in ParserConcat will handle flattening this
-        if (nested_items.size() == 1) {
-          // Single item, clone its parts
-          ConcatNode<charT>* nested_concat = static_cast<ConcatNode<charT>*>(nested_items[0].get());
-          auto& nested_parts = nested_concat->GetBasicGlobs();
-          for (auto& part : nested_parts) {
-            parts.push_back(CloneNode(part.get()));
-          }
-        } else {
-          // Multiple items - create a union node
-          parts.push_back(AstNodePtr<charT>(new UnionNode<charT>(std::move(nested_items))));
-        }
-      } else {
-        parts.push_back(ParserBasicGlob());
+      switch (tk.Kind()) {
+        case TokenKind::CHAR:
+          parts.push_back(ParserChar());
+          break;
+          
+        case TokenKind::QUESTION:
+          Advance();
+          parts.push_back(AstNodePtr<charT>(new AnyNode<charT>()));
+          break;
+          
+        case TokenKind::STAR:
+          Advance();
+          parts.push_back(AstNodePtr<charT>(new StarNode<charT>()));
+          break;
+          
+        case TokenKind::LBRACKET:
+        case TokenKind::NEGLBRACKET:
+          parts.push_back(ParserSet());
+          break;
+          
+        case TokenKind::LBRACE:
+          // Allow nested braces
+          parts.push_back(ParserBraceGroup());
+          break;
+          
+        case TokenKind::SUB:
+          Advance();
+          parts.push_back(AstNodePtr<charT>(new CharNode<charT>('-')));
+          break;
+          
+        default:
+          throw Error("Unexpected token in brace alternative");
       }
+    }
+
+    // Handle empty alternative (e.g., {,.bak})
+    if (parts.empty()) {
+      // Empty alternative matches empty string - return empty concat
+      return AstNodePtr<charT>(new ConcatNode<charT>(std::move(parts)));
     }
 
     return AstNodePtr<charT>(new ConcatNode<charT>(std::move(parts)));
@@ -1564,16 +1647,7 @@ class Parser {
         case TokenKind::EOS:
         case TokenKind::RPAREN:
         case TokenKind::UNION:
-        case TokenKind::RBRACE:
           return true;
-          break;
-
-        case TokenKind::CHAR:
-          // Check if CHAR is a comma (for brace expansion)
-          if (tk.Value() == ',') {
-            return true;
-          }
-          return false;
           break;
 
         default:
@@ -1583,178 +1657,12 @@ class Parser {
     };
 
     std::vector<AstNodePtr<charT>> parts;
-    size_t brace_pos = SIZE_MAX;
 
-    // First pass: collect parts and find brace position
     while (!check_end()) {
-      Token<charT>& tk = GetToken();
-      
-      // Check for brace expansion
-      if (tk == TokenKind::LBRACE) {
-        brace_pos = parts.size();
-        break;
-      }
-      
       parts.push_back(ParserBasicGlob());
     }
 
-    // If no brace found, return simple concat
-    if (brace_pos == SIZE_MAX) {
-      return AstNodePtr<charT>(new ConcatNode<charT>(std::move(parts)));
-    }
-
-    // Brace expansion detected: split into prefix + brace + suffix
-    std::vector<AstNodePtr<charT>> prefix_parts;
-    for (size_t i = 0; i < brace_pos; ++i) {
-      prefix_parts.push_back(std::move(parts[i]));
-    }
-
-    // Parse brace expansion items
-    std::vector<AstNodePtr<charT>> brace_items = ParserBraceExpansion();
-
-    // Parse suffix parts (everything after the brace until end)
-    // This may contain additional brace expansions - handle recursively
-    AstNodePtr<charT> suffix_node = ParserConcat();
-    
-    // If suffix contains another brace expansion, it will be a UnionNode
-    // We need to handle the cartesian product of brace expansions
-    std::vector<std::vector<AstNodePtr<charT>>> suffix_variants;
-    if (suffix_node->GetType() == AstNode<charT>::Type::UNION) {
-      // Multiple brace expansions - need cartesian product
-      UnionNode<charT>* suffix_union = static_cast<UnionNode<charT>*>(suffix_node.get());
-      auto& suffix_items = suffix_union->GetItems();
-      for (auto& suffix_item : suffix_items) {
-        ConcatNode<charT>* suffix_concat = static_cast<ConcatNode<charT>*>(suffix_item.get());
-        auto& suffix_parts = suffix_concat->GetBasicGlobs();
-        std::vector<AstNodePtr<charT>> variant;
-        for (auto& part : suffix_parts) {
-          variant.push_back(CloneNode(part.get()));
-        }
-        suffix_variants.push_back(std::move(variant));
-      }
-    } else {
-      // Single suffix (no additional braces)
-      ConcatNode<charT>* suffix_concat = static_cast<ConcatNode<charT>*>(suffix_node.get());
-      auto& suffix_parts = suffix_concat->GetBasicGlobs();
-      std::vector<AstNodePtr<charT>> variant;
-      for (auto& part : suffix_parts) {
-        variant.push_back(CloneNode(part.get()));
-      }
-      suffix_variants.push_back(std::move(variant));
-    }
-
-    // Expand: for each brace item, create prefix + item + suffix
-    // Handle nested braces by expanding unions in brace items
-    std::vector<AstNodePtr<charT>> expanded_items;
-    for (auto& brace_item : brace_items) {
-      // Brace items should always be ConcatNodes
-      if (brace_item->GetType() != AstNode<charT>::Type::CONCAT_GLOB) {
-        throw Error("Invalid brace item type");
-      }
-      
-      ConcatNode<charT>* brace_concat = static_cast<ConcatNode<charT>*>(brace_item.get());
-      auto& brace_item_parts = brace_concat->GetBasicGlobs();
-      
-      // Check if any part is a union
-      bool has_union = false;
-      for (auto& part : brace_item_parts) {
-        if (part->GetType() == AstNode<charT>::Type::UNION) {
-          has_union = true;
-          break;
-        }
-      }
-      
-      if (has_union) {
-        // Expand union: create one item per union alternative
-        std::vector<std::vector<AstNodePtr<charT>>> item_variants;
-        item_variants.push_back(std::vector<AstNodePtr<charT>>());
-        
-        for (auto& part : brace_item_parts) {
-          if (part->GetType() == AstNode<charT>::Type::UNION) {
-            // Expand union: create new variants for each union item
-            UnionNode<charT>* union_node = static_cast<UnionNode<charT>*>(part.get());
-            auto& union_items = union_node->GetItems();
-            
-            std::vector<std::vector<AstNodePtr<charT>>> new_variants;
-            for (auto& variant : item_variants) {
-              for (auto& union_item : union_items) {
-                std::vector<AstNodePtr<charT>> new_variant;
-                // Clone all parts from variant
-                for (auto& part : variant) {
-                  new_variant.push_back(CloneNode(part.get()));
-                }
-                ConcatNode<charT>* union_concat = static_cast<ConcatNode<charT>*>(union_item.get());
-                auto& union_parts = union_concat->GetBasicGlobs();
-                for (auto& union_part : union_parts) {
-                  new_variant.push_back(CloneNode(union_part.get()));
-                }
-                new_variants.push_back(std::move(new_variant));
-              }
-            }
-            item_variants = std::move(new_variants);
-          } else {
-            // Regular part, add to all variants
-            for (auto& variant : item_variants) {
-              variant.push_back(CloneNode(part.get()));
-            }
-          }
-        }
-        
-        // Create expanded items from variants
-        for (auto& variant : item_variants) {
-          std::vector<AstNodePtr<charT>> expanded_parts;
-          
-          // Add prefix parts
-          for (auto& part : prefix_parts) {
-            expanded_parts.push_back(CloneNode(part.get()));
-          }
-          
-          // Add variant parts
-          for (auto& part : variant) {
-            expanded_parts.push_back(std::move(part));
-          }
-          
-          // Add suffix parts - cartesian product with suffix variants
-          for (auto& suffix_variant : suffix_variants) {
-            std::vector<AstNodePtr<charT>> final_parts;
-            // Clone expanded_parts
-            for (auto& part : expanded_parts) {
-              final_parts.push_back(CloneNode(part.get()));
-            }
-            // Add suffix variant parts
-            for (auto& part : suffix_variant) {
-              final_parts.push_back(CloneNode(part.get()));
-            }
-            expanded_items.push_back(AstNodePtr<charT>(new ConcatNode<charT>(std::move(final_parts))));
-          }
-        }
-      } else {
-        // No union in brace item, simple expansion with cartesian product of suffix variants
-        for (auto& suffix_variant : suffix_variants) {
-          std::vector<AstNodePtr<charT>> expanded_parts;
-          
-          // Add prefix parts
-          for (auto& part : prefix_parts) {
-            expanded_parts.push_back(CloneNode(part.get()));
-          }
-          
-          // Add brace item parts
-          for (auto& part : brace_item_parts) {
-            expanded_parts.push_back(CloneNode(part.get()));
-          }
-          
-          // Add suffix variant parts
-          for (auto& part : suffix_variant) {
-            expanded_parts.push_back(CloneNode(part.get()));
-          }
-          
-          expanded_items.push_back(AstNodePtr<charT>(new ConcatNode<charT>(std::move(expanded_parts))));
-        }
-      }
-    }
-
-    // Return union of expanded items
-    return AstNodePtr<charT>(new UnionNode<charT>(std::move(expanded_items)));
+    return AstNodePtr<charT>(new ConcatNode<charT>(std::move(parts)));
   }
 
   AstNodePtr<charT> ParserUnion() {
@@ -1827,55 +1735,11 @@ class AstConsumer {
   void GenAutomata(AstNode<charT>* root_node, Automata<charT>& automata) {
     AstNode<charT>* concat_node = static_cast<GlobNode<charT>*>(root_node)
         ->GetConcat();
-    
-    // Check if the concat node is actually a union (from brace expansion)
-    if (concat_node->GetType() == AstNode<charT>::Type::UNION) {
-      // Handle union at top level (from brace expansion)
-      UnionNode<charT>* union_node = static_cast<UnionNode<charT>*>(concat_node);
-      auto& items = union_node->GetItems();
-      
-      // Create a union state that matches any of the alternatives
-      // For brace expansion at top level, we need full string matching
-      std::vector<std::unique_ptr<Automata<charT>>> automatas;
-      for (auto& item : items) {
-        std::unique_ptr<Automata<charT>> automata_ptr(new Automata<charT>);
-        AstConsumer ast_consumer;
-        ast_consumer.ExecConcat(item.get(), *automata_ptr);
-        
-        size_t match_state = automata_ptr->template NewState<StateMatch<charT>>();
-        automata_ptr->GetState(ast_consumer.preview_state_)
-            .AddNextState(match_state);
-        automata_ptr->SetMatchState(match_state);
-        
-        size_t fail_state = automata_ptr->template NewState<StateFail<charT>>();
-        automata_ptr->SetFailState(fail_state);
-        
-        // Store the automata for the union state group
-        automatas.push_back(std::move(automata_ptr));
-      }
-      
-      // Create a union state group starting from state 0
-      preview_state_ = -1; // Reset preview state so NewState starts from beginning
-      NewState<StateGroup<charT>>(automata, StateGroup<charT>::Type::BASIC,
-          std::move(automatas));
-      // StateGroup::NextBasic uses GetNextStates()[1] after matching
-      // So we need to add the match state as the second next state
-      // First add a dummy next state (index 0), then the match state (index 1)
-      size_t union_state = current_state_;
-      size_t dummy_state = automata.template NewState<StateFail<charT>>();
-      automata.GetState(union_state).AddNextState(dummy_state);
-      
-      size_t match_state = automata.template NewState<StateMatch<charT>>();
-      automata.GetState(union_state).AddNextState(match_state);
-      automata.SetMatchState(match_state);
-      preview_state_ = union_state; // Update for consistency
-    } else {
-      ExecConcat(concat_node, automata);
-      
-      size_t match_state = automata.template NewState<StateMatch<charT>>();
-      automata.GetState(preview_state_).AddNextState(match_state);
-      automata.SetMatchState(match_state);
-    }
+    ExecConcat(concat_node, automata);
+
+    size_t match_state = automata.template NewState<StateMatch<charT>>();
+    automata.GetState(preview_state_).AddNextState(match_state);
+    automata.SetMatchState(match_state);
 
     size_t fail_state = automata.template NewState<StateFail<charT>>();
     automata.SetFailState(fail_state);
@@ -2024,7 +1888,12 @@ class AstConsumer {
 
     NewState<StateGroup<charT>>(automata, state_group_type,
         std::move(automatas));
-    automata.GetState(current_state_).AddNextState(current_state_);
+    // skip BASIC (and potentially AT/NEG if non-repeating)
+    if (state_group_type != StateGroup<charT>::Type::BASIC &&
+        state_group_type != StateGroup<charT>::Type::AT &&
+        state_group_type != StateGroup<charT>::Type::NEG) {
+      automata.GetState(current_state_).AddNextState(current_state_);
+    }  
   }
 
   std::vector<std::unique_ptr<Automata<charT>>> ExecUnion(
@@ -2032,19 +1901,30 @@ class AstConsumer {
     UnionNode<charT>* union_node = static_cast<UnionNode<charT>*>(node);
     auto& items = union_node->GetItems();
     std::vector<std::unique_ptr<Automata<charT>>> vec_automatas;
+
     for (auto& item : items) {
       std::unique_ptr<Automata<charT>> automata_ptr(new Automata<charT>);
       AstConsumer ast_consumer;
       ast_consumer.ExecConcat(item.get(), *automata_ptr);
-
+  
       size_t match_state = automata_ptr->template NewState<StateMatch<charT>>();
-      automata_ptr->GetState(ast_consumer.preview_state_)
-          .AddNextState(match_state);
+      
+      // Check if any states were created during ExecConcat
+      if (ast_consumer.preview_state_ >= 0) {
+        // Normal case: link the last created state to the match state
+        automata_ptr->GetState(ast_consumer.preview_state_)
+            .AddNextState(match_state);
+      } else {
+        // Empty concat (e.g., from {,.bak}): no states were created
+        // The match_state (state 0) will match immediately at the start
+        // No linking needed - execution starts at state 0 which is match_state
+      }
+      
       automata_ptr->SetMatchState(match_state);
-
+  
       size_t fail_state = automata_ptr->template NewState<StateFail<charT>>();
       automata_ptr->SetFailState(fail_state);
-
+  
       vec_automatas.push_back(std::move(automata_ptr));
     }
 

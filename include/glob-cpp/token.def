@@ -19,5 +19,6 @@ TOKEN(RBRACKET,    "]")
 TOKEN(NEGLBRACKET, "[^")
 TOKEN(LBRACE,      "{")
 TOKEN(RBRACE,      "}")
+TOKEN(DOTDOT,      "..")
 
 #undef TOKEN
