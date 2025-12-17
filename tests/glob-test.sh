@@ -555,6 +555,12 @@ test_glob "*(test)" "test" "true" "ZeroLengthMatch: *(test) matches test"
 test_glob "*(test)" "testtest" "true" "ZeroLengthMatch: *(test) matches testtest"
 echo ""
 
+# Test: EmptyPattern
+echo "Test: EmptyPattern"
+test_glob "" "" "true" "EmptyPattern: '' matches empty"
+test_glob "" "test" "false" "EmptyPattern: '' does not match 'test'"
+echo ""
+
 # ============================================================================
 # Parameterized Tests for Similar Cases
 # ============================================================================
@@ -976,6 +982,78 @@ echo "Test: Context-Aware - Exclamation"
 test_glob "wow!" "wow!" "true" "Exclamation without parens is literal"
 test_glob "wow!" "wow" "false" "Exclamation is not optional"
 test_glob "*!" "test!" "true" "Exclamation literal with wildcards"
+echo ""
+
+# ============================================================================
+# GLOBSTAR (`**`) TESTS
+# ============================================================================
+# These test recursive directory matching with globstar (`**`)
+# Bash reference: shopt -s globstar; ** matches any depth
+
+echo "Test: Globstar Basic"
+test_glob "**/*.cpp" "foo.cpp" "true" "Globstar: **/*.cpp matches foo.cpp (zero dirs)"
+test_glob "**/*.cpp" "src/foo.cpp" "true" "Globstar: **/*.cpp matches src/foo.cpp"
+test_glob "**/*.cpp" "src/sub/foo.cpp" "true" "Globstar: **/*.cpp matches deep src/sub/foo.cpp"
+test_glob "**/*.cpp" "foo.txt" "false" "Globstar: **/*.cpp does not match foo.txt"
+echo ""
+
+echo "Test: Globstar At Start"
+test_glob "**/baz/foo.cpp" "bar/baz/foo.cpp" "true" "Globstar at start: **/baz/foo.cpp matches bar/baz/foo.cpp"
+test_glob "**/baz/foo.cpp" "baz/foo.cpp" "true" "Globstar at start: **/baz/foo.cpp matches baz/foo.cpp (zero prefix)"
+test_glob "**/baz/foo.cpp" "bar/baz/bar/foo.cpp" "false" "Globstar at start: **/baz/foo.cpp does not match bar/baz/bar/foo.cpp"
+echo ""
+
+echo "Test: Globstar At End"
+test_glob "src/**" "src/file.txt" "true" "Globstar at end: src/** matches src/file.txt"
+test_glob "src/**" "src/sub/dir/file.txt" "true" "Globstar at end: src/** matches deep src/sub/dir/file.txt"
+test_glob "src/**" "src" "true" "Globstar at end: src/** matches src/ (empty)"
+test_glob "src/**" "other/src/file.txt" "false" "Globstar at end: src/** does not match other/src/file.txt"
+echo ""
+
+echo "Test: Globstar Middle"
+test_glob "src/**/test/*.cpp" "src/a/b/test/foo.cpp" "true" "Globstar middle: src/**/test/*.cpp matches src/a/b/test/foo.cpp"
+test_glob "src/**/test/*.cpp" "src/test/foo.cpp" "true" "Globstar middle: src/**/test/*.cpp matches src/test/foo.cpp"
+test_glob "src/**/test/*.cpp" "src/a/test/foo.cpp" "true" "Globstar middle: src/**/test/*.cpp matches src/a/test/foo.cpp"
+test_glob "src/**/test/*.cpp" "src/test.txt" "false" "Globstar middle: src/**/test/*.cpp does not match src/test.txt"
+echo ""
+
+echo "Test: Multiple Globstar"
+test_glob "**/src/**/test" "a/b/src/c/d/test" "true" "Multiple globstar: **/src/**/test matches a/b/src/c/d/test"
+test_glob "**/src/**/test" "src/test" "true" "Multiple globstar: **/src/**/test matches src/test"
+test_glob "**/src/**/test" "a/src/b/test" "true" "Multiple globstar: **/src/**/test matches a/src/b/test"
+echo ""
+
+echo "Test: Globstar Directory Only (trailing /)"
+test_glob "**/" "dir/sub/" "true" "Globstar trailing /: **/ matches dir/sub/ (directory)"
+test_glob "**/" "dir/sub/file.txt" "false" "Globstar trailing /: **/ does not match dir/sub/file.txt"
+test_glob "**/" "dir" "false" "Globstar trailing /: **/ does not match dir (no trailing /)"
+echo ""
+
+echo "Test: Globstar With Non-Standalone **"
+test_glob "src/**.cpp" "src/foo.cpp" "true" "Globstar with non-standalone: src/**.cpp matches src/foo.cpp (collapses to src/*.cpp)"
+test_glob "src/**.cpp" "src/sub/foo.cpp" "true" "Globstar with non-standalone: src/**.cpp matches src/sub/foo.cpp"
+test_glob "src/**.cpp" "src/foo.txt" "false" "Globstar with non-standalone: src/**.cpp does not match src/foo.txt"
+echo ""
+
+echo "Test: Globstar With Trailing Slash and Non-Standalone"
+test_glob "**/**.txt" "bar/baz/foo.txt" "true" "Globstar: **/**.txt matches bar/baz/foo.txt (standalone ** + non-standalone **.txt collapsed to *.txt)"
+test_glob "**/**.txt" "bar/foo.txt" "true" "Globstar: **/**.txt matches bar/foo.txt (zero dirs after **)"
+test_glob "**/**.txt" "foo.txt" "true" "Globstar: **/**.txt matches foo.txt (zero dirs)"
+test_glob "**/**.txt" "bar/baz/foo.txt" "true" "Globstar: **/**.txt matches bar/baz/foo.txt"
+test_glob "**/**.txt" "bar/baz/foo.txt.bak" "false" "Globstar: **/**.txt does not match bar/baz/foo.txt.bak"
+echo ""
+
+echo "Test: Globstar Edge Cases"
+test_glob "**" "" "true" "Globstar: ** matches empty string"
+test_glob "**" "file.txt" "true" "Globstar: ** matches file.txt"
+test_glob "**" "dir/sub/file.txt" "true" "Globstar: ** matches dir/sub/file.txt"
+test_glob "**/*.txt" "file.txt" "true" "Globstar: **/*.txt matches file.txt"
+test_glob "**/*.txt" "dir/file.txt" "true" "Globstar: **/*.txt matches dir/file.txt"
+echo ""
+
+echo "Test: Globstar With Escaped **"
+test_glob "foo\\**bar" "foo**bar" "true" "Escaped \\**: foo\\**bar matches foo**bar literally"
+test_glob "foo\\**bar" "foobar" "false" "Escaped \\**: foo\\**bar does not match foobar"
 echo ""
 
 # ============================================================================

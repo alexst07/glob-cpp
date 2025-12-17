@@ -57,20 +57,20 @@
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "bar/baz/foo.cpp"
-            isEnabled = "NO">
-         </CommandLineArgument>
-         <CommandLineArgument
             argument = "**/*.cpp"
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "&apos;&apos;"
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "bar/baz/foo.cpp"
-            isEnabled = "NO">
+            isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "*.{h,hp,hpp,hxx,c,cc,cp,cpp,cxx}"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "*.@(h|hp|hpp|hxx|c|cc|cp|cpp|cxx)"
@@ -78,7 +78,7 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "foo.hp"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "[A-Z]*.cpp"
@@ -97,11 +97,23 @@
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
+            argument = "**/baz/**.cpp"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
             argument = "*/baz**/*.cpp"
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "bar/baz/foo.cpp"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "**/"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "dir/sub/file.txt"
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
@@ -142,6 +154,14 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "A.txt"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "https://**.google.com"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "https://foo.bar.google.com"
             isEnabled = "NO">
          </CommandLineArgument>
       </CommandLineArguments>
