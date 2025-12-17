@@ -457,6 +457,12 @@ TEST_F(GlobTestFixture, ZeroLengthMatch) {
   EXPECT_TRUE(glob::glob_match("testtest", g));
 }
 
+TEST_F(GlobTestFixture, EmptyPattern) {
+  glob::glob g("");
+  EXPECT_TRUE(glob::glob_match("", g));
+  EXPECT_FALSE(glob::glob_match("test", g));
+}
+
 // ============================================================================
 // Wide Character Tests
 // ============================================================================

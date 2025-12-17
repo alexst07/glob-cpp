@@ -80,6 +80,41 @@ class Error: public std::exception {
   std::string msg_;
 };
 
+template<class charT>
+std::vector<String<charT>> split_path(const String<charT>& s, charT delim = static_cast<charT>('/')) {
+  // Splits on delim, preserves empty components including empty ones (important for trailing '/')
+  std::vector<String<charT>> result;
+  size_t start = 0;
+  for (size_t i = 0; i < s.size(); ++i) {
+    if (s[i] == delim) {
+      result.emplace_back(s.substr(start, i - start));
+      start = i + 1;
+    }
+  }
+  result.emplace_back(s.substr(start));
+  return result;
+}
+
+// Helper to collapse unescaped "**" to "*" in a string (Bash-like behavior).
+// - Only collapses exactly "**" (not more stars).
+// - Skips escaped sequences (e.g., "\\**" remains literal "**").
+// - 3+ stars remain literal (no collapse, per standard glob implementations).
+template<class charT>
+String<charT> collapse_stars(String<charT> s) {
+  size_t pos = 0;
+  while ((pos = s.find("**", pos)) != String<charT>::npos) {
+    // Skip if escaped
+    if (pos > 0 && s[pos - 1] == '\\') {
+      pos += 2;
+      continue;
+    }
+    // Replace "**" with "*" (collapses to single any-char wildcard)
+    s.replace(pos, 2, "*");
+    pos += 1;  // Continue scanning from after replacement
+  }
+  return s;
+}
+
 enum class StateType {
   MATCH,
   FAIL,
@@ -796,7 +831,7 @@ class Lexer {
  public:
   static const char kEndOfInput = -1;
 
-  Lexer(const String<charT>& str): str_(str), c_{str[0]} {}
+  Lexer(const String<charT>& str): str_(str), c_{str.empty() ? kEndOfInput : str[0]}  {}
 
   std::vector<Token<charT>> Scanner() {
     std::vector<Token<charT>> tokens;
@@ -1001,7 +1036,7 @@ class Lexer {
   }
 
   void Advance() {
-    if (pos_ == (str_.length() - 1)) {
+    if ((pos_ + 1) >= str_.length()) {
       c_ = kEndOfInput;
       return;
     }
@@ -1738,7 +1773,9 @@ class AstConsumer {
     ExecConcat(concat_node, automata);
 
     size_t match_state = automata.template NewState<StateMatch<charT>>();
-    automata.GetState(preview_state_).AddNextState(match_state);
+    if (preview_state_ != -1) {  // Only add if there are prior states (skip for empty pattern)
+      automata.GetState(preview_state_).AddNextState(match_state);
+    }
     automata.SetMatchState(match_state);
 
     size_t fail_state = automata.template NewState<StateFail<charT>>();
@@ -1950,18 +1987,49 @@ class ExtendedGlob {
  public:
   ExtendedGlob(const String<charT>& pattern) GLOBSTAR_NOEXCEPT {
     GLOBSTAR_TRY {
-      Lexer<charT> l(pattern);
-      std::vector<Token<charT>> tokens = l.Scanner();
-      Parser<charT> p(std::move(tokens));
-      AstNodePtr<charT> ast_ptr = p.GenAst();
+      pattern_parts_ = split_path(pattern);
+      for (const auto& part : pattern_parts_) {
+        if (part == "**") {
+          has_globstar_ = true;
+          break;
+        }
+      }
+      
+      if (!has_globstar_) {
+        // Fast path: no globstar — use original NFA engine
+        // Collapse unescaped "**" to "*" in the entire pattern
+        String<charT> processed_pattern = collapse_stars(pattern);
+        Lexer<charT> lexer(processed_pattern);
+        std::vector<Token<charT>> tokens = lexer.Scanner();
+        Parser<charT> parser(std::move(tokens));
+        AstNodePtr<charT> ast_ptr = parser.GenAst();
+        
+        AstConsumer<charT> ast_consumer;
+        ast_consumer.GenAutomata(ast_ptr.get(), automata_);
+      } else {
+        // Globstar present — switch to component-based matching
+        part_matchers_.reserve(pattern_parts_.size());
+        is_globstar_part_.reserve(pattern_parts_.size());
 
-      AstConsumer<charT> ast_consumer;
-      ast_consumer.GenAutomata(ast_ptr.get(), automata_);
+        for (auto part : pattern_parts_) {
+          if (part == "**") {
+            // True recursive globstar component
+            is_globstar_part_.push_back(true);
+            part_matchers_.push_back(nullptr);
+          } else {
+			// Non-standalone: collapse unescaped "**" to "*" in this part
+            part = collapse_stars(part);
+            is_globstar_part_.push_back(false);
+            part_matchers_.push_back(std::make_unique<ExtendedGlob<charT>>(part));
+          }
+        }
+      }
       return; // Success
     }
     GLOBSTAR_CATCH_AND_LOG("ExtendedGlob::ExtendedGlob()")
     
     // Failure path: clear any partial state and create a safe always-fail automata
+    has_globstar_ = false;
     automata_ = Automata<charT>();  // Reset to empty state
     size_t fail = automata_.template NewState<StateFail<charT>>();
     automata_.SetFailState(fail);
@@ -1973,25 +2041,85 @@ class ExtendedGlob {
   ExtendedGlob& operator=(ExtendedGlob&) = delete;
 
   ExtendedGlob(ExtendedGlob&& glob) noexcept
-    : automata_{std::move(glob.automata_)} {}
+      : has_globstar_(glob.has_globstar_),
+        automata_(std::move(glob.automata_)),
+        pattern_parts_(std::move(glob.pattern_parts_)),
+        part_matchers_(std::move(glob.part_matchers_)),
+        is_globstar_part_(std::move(glob.is_globstar_part_)) {}
 
   ExtendedGlob& operator=(ExtendedGlob&& glob) noexcept {
+    has_globstar_ = glob.has_globstar_;
     automata_ = std::move(glob.automata_);
+    pattern_parts_ = std::move(glob.pattern_parts_);
+    part_matchers_ = std::move(glob.part_matchers_);
+    is_globstar_part_ = std::move(glob.is_globstar_part_);
     return *this;
   }
 
   bool Exec(const String<charT>& str) {
-    bool r;
-    std::tie(r, std::ignore) = automata_.Exec(str);
-    return r;
+    if (!has_globstar_) {
+      bool r;
+      std::tie(r, std::ignore) = automata_.Exec(str);
+      return r;
+    }
+  
+    // === Globstar-aware matching using dynamic programming over path components ===
+    // Split pattern/string into '/' components; use DP matrix where prefix_matches[i][j] = true if first i pattern parts match first j string parts.
+    // Handles '**' as 0+ any components; sub-patterns use recursive ExtendedGlob (safe, as sub-parts lack '**').
+    // Empty parts handle trailing '/' (directory matching).
+    auto input_parts = split_path(str);
+    size_t pat_count = pattern_parts_.size();
+    size_t str_count = input_parts.size();
+
+    std::vector<std::vector<bool>> prefix_matches(pat_count + 1,
+                                                    std::vector<bool>(str_count + 1, false));
+    prefix_matches[0][0] = true;
+
+      for (size_t i = 1; i <= pat_count; ++i) {
+        bool is_globstar = is_globstar_part_[i - 1];
+
+        if (is_globstar) {
+          prefix_matches[i][0] = prefix_matches[i - 1][0];
+          for (size_t j = 1; j <= str_count; ++j) {
+            prefix_matches[i][j] = prefix_matches[i - 1][j] || prefix_matches[i][j - 1];
+          }
+        } else {
+          const String<charT>& part_pat = pattern_parts_[i - 1];
+
+          if (part_pat.empty()) {
+            for (size_t j = 1; j <= str_count; ++j) {
+              if (input_parts[j - 1].empty()) {
+                prefix_matches[i][j] = prefix_matches[i - 1][j - 1];
+              }
+            }
+          } else {
+            for (size_t j = 1; j <= str_count; ++j) {
+              if (part_matchers_[i - 1]->Exec(input_parts[j - 1])) {
+                prefix_matches[i][j] = prefix_matches[i - 1][j - 1];
+              }
+            }
+          }
+        }
+      }
+
+    return prefix_matches[pat_count][str_count];
   }
 
   const Automata<charT>& GetAutomata() const {
+    if (has_globstar_) {
+      throw Error("Automata not available for patterns with globstar '**'");
+    }
     return automata_;
   }
 
  private:
-  Automata<charT> automata_;
+  bool has_globstar_ = false;
+  Automata<charT> automata_;  // Used only when !has_globstar_
+
+  // Used only when has_globstar_ == true
+  std::vector<String<charT>> pattern_parts_;
+  std::vector<std::unique_ptr<ExtendedGlob<charT>>> part_matchers_;
+  std::vector<bool> is_globstar_part_;
 };
 
 template<class charT>
