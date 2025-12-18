@@ -622,21 +622,25 @@ TEST_F(FileGlobTestFixture, NonExistentDirectory) {
   EXPECT_GE(results.size(), 0);
 }
 
-TEST_F(FileGlobTestFixture, InvalidPattern) {
-  // Test with malformed pattern - should handle gracefully
+#if GLOBCPP_NOEXCEPT_ENABLED
+// Noexcept mode: invalid patterns create safe fallback automata
+TEST_F(FileGlobTestFixture, InvalidPattern_NoExcept) {
   fs::path pattern = test_dir_ / "[invalid";
-  
-  // This might throw or return empty - test actual behavior
-  try {
+  glob::file_glob fglob(pattern.string());
+  std::vector<glob::path_match> results = fglob.Exec();
+  // Should return empty results for invalid pattern in noexcept mode
+  EXPECT_EQ(results.size(), 0);
+}
+#else
+// Exception mode: invalid patterns throw glob::Error
+TEST_F(FileGlobTestFixture, InvalidPattern_Throws) {
+  fs::path pattern = test_dir_ / "[invalid";
+  EXPECT_THROW({
     glob::file_glob fglob(pattern.string());
     std::vector<glob::path_match> results = fglob.Exec();
-    // If it doesn't throw, results should be empty or handled
-    EXPECT_GE(results.size(), 0);
-  } catch (const glob::Error& e) {
-    // Exception is acceptable for invalid patterns
-    EXPECT_TRUE(true);
-  }
+  }, glob::Error);
 }
+#endif
 
 // ============================================================================
 // Specific Pattern Tests

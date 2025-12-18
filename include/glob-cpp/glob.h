@@ -95,22 +95,39 @@ std::vector<String<charT>> split_path(const String<charT>& s, charT delim = stat
   return result;
 }
 
+// Helper to check if a string is exactly "**" (globstar pattern)
+template<class charT>
+bool is_globstar(const String<charT>& s) {
+  return s.length() == 2 && s[0] == static_cast<charT>('*') && s[1] == static_cast<charT>('*');
+}
+
 // Helper to collapse unescaped "**" to "*" in a string (Bash-like behavior).
 // - Only collapses exactly "**" (not more stars).
 // - Skips escaped sequences (e.g., "\\**" remains literal "**").
 // - 3+ stars remain literal (no collapse, per standard glob implementations).
 template<class charT>
 String<charT> collapse_stars(String<charT> s) {
+  if (s.length() < 2) {
+    return s;  // Nothing to collapse
+  }
+  
+  const charT star = static_cast<charT>('*');
+  const charT backslash = static_cast<charT>('\\');
+  
   size_t pos = 0;
-  while ((pos = s.find("**", pos)) != String<charT>::npos) {
-    // Skip if escaped
-    if (pos > 0 && s[pos - 1] == '\\') {
-      pos += 2;
-      continue;
+  while (pos + 1 < s.length()) {
+    if (s[pos] == star && s[pos + 1] == star) {
+      // Skip if escaped
+      if (pos > 0 && s[pos - 1] == backslash) {
+        pos += 2;
+        continue;
+      }
+      // Replace "**" with "*" (collapses to single any-char wildcard)
+      s.erase(pos, 1);  // Remove one star
+      pos += 1;  // Continue scanning from after replacement
+    } else {
+      pos++;
     }
-    // Replace "**" with "*" (collapses to single any-char wildcard)
-    s.replace(pos, 2, "*");
-    pos += 1;  // Continue scanning from after replacement
   }
   return s;
 }
@@ -1989,7 +2006,7 @@ class ExtendedGlob {
     GLOBCPP_TRY {
       pattern_parts_ = split_path(pattern);
       for (const auto& part : pattern_parts_) {
-        if (part == "**") {
+        if (is_globstar(part)) {
           has_globstar_ = true;
           break;
         }
@@ -2012,7 +2029,7 @@ class ExtendedGlob {
         is_globstar_part_.reserve(pattern_parts_.size());
 
         for (auto part : pattern_parts_) {
-          if (part == "**") {
+          if (is_globstar(part)) {
             // True recursive globstar component
             is_globstar_part_.push_back(true);
             part_matchers_.push_back(nullptr);
