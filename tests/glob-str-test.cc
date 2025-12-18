@@ -335,49 +335,111 @@ TEST_F(GlobTestFixture, EscapeInPattern) {
 // ============================================================================
 // Error Handling Tests
 // ============================================================================
+// These tests behave differently based on GLOBCPP_NOEXCEPT_ENABLED:
+// - In noexcept mode (default): invalid patterns create safe fallback automata
+// - In exception mode: invalid patterns throw glob::Error
 
-TEST_F(GlobTestFixture, ErrorUnclosedBracket) {
+#if GLOBCPP_NOEXCEPT_ENABLED
+// Noexcept mode: invalid patterns create safe fallback automata that don't match
+TEST_F(GlobTestFixture, ErrorUnclosedBracket_NoExcept) {
+  glob::glob g("[abc");
+  // Pattern construction succeeds but creates a fail-safe automata
+  EXPECT_FALSE(glob::glob_match("abc", g));
+  EXPECT_FALSE(glob::glob_match("a", g));
+  EXPECT_FALSE(glob::glob_match("[abc", g));
+}
+
+TEST_F(GlobTestFixture, ErrorUnclosedNegativeBracket_NoExcept) {
+  glob::glob g("[^abc");
+  // Pattern construction succeeds but creates a fail-safe automata
+  EXPECT_FALSE(glob::glob_match("abc", g));
+  EXPECT_FALSE(glob::glob_match("d", g));
+  EXPECT_FALSE(glob::glob_match("[^abc", g));
+}
+
+TEST_F(GlobTestFixture, ErrorUnclosedGroup_NoExcept) {
+  glob::glob g("(abc");
+  // Pattern construction succeeds but creates a fail-safe automata
+  EXPECT_FALSE(glob::glob_match("abc", g));
+  EXPECT_FALSE(glob::glob_match("(abc", g));
+}
+
+TEST_F(GlobTestFixture, ErrorUnclosedStarGroup_NoExcept) {
+  glob::glob g("*(abc");
+  // Pattern construction succeeds but creates a fail-safe automata
+  EXPECT_FALSE(glob::glob_match("abc", g));
+  EXPECT_FALSE(glob::glob_match("abcabc", g));
+  EXPECT_FALSE(glob::glob_match("*(abc", g));
+}
+
+TEST_F(GlobTestFixture, ErrorInvalidEscape_NoExcept) {
+  glob::glob g("\\");
+  // Pattern construction succeeds but creates a fail-safe automata
+  EXPECT_FALSE(glob::glob_match("\\", g));
+  EXPECT_FALSE(glob::glob_match("", g));
+  EXPECT_FALSE(glob::glob_match("a", g));
+}
+
+TEST_F(GlobTestFixture, ErrorInvalidRange_NoExcept) {
+  glob::glob g("[a-]");
+  // Pattern construction succeeds but creates a fail-safe automata
+  EXPECT_FALSE(glob::glob_match("a", g));
+  EXPECT_FALSE(glob::glob_match("-", g));
+  EXPECT_FALSE(glob::glob_match("[a-]", g));
+}
+
+TEST_F(GlobTestFixture, ErrorInvalidRangeStart_NoExcept) {
+  glob::glob g("[-a]");
+  // Pattern construction succeeds but creates a fail-safe automata
+  EXPECT_FALSE(glob::glob_match("a", g));
+  EXPECT_FALSE(glob::glob_match("-", g));
+  EXPECT_FALSE(glob::glob_match("[-a]", g));
+}
+
+#else
+// Exception mode: invalid patterns throw glob::Error
+TEST_F(GlobTestFixture, ErrorUnclosedBracket_Throws) {
   EXPECT_THROW({
     glob::glob g("[abc");
   }, glob::Error);
 }
 
-TEST_F(GlobTestFixture, ErrorUnclosedNegativeBracket) {
+TEST_F(GlobTestFixture, ErrorUnclosedNegativeBracket_Throws) {
   EXPECT_THROW({
     glob::glob g("[^abc");
   }, glob::Error);
 }
 
-TEST_F(GlobTestFixture, ErrorUnclosedGroup) {
+TEST_F(GlobTestFixture, ErrorUnclosedGroup_Throws) {
   EXPECT_THROW({
     glob::glob g("(abc");
   }, glob::Error);
 }
 
-TEST_F(GlobTestFixture, ErrorUnclosedStarGroup) {
+TEST_F(GlobTestFixture, ErrorUnclosedStarGroup_Throws) {
   EXPECT_THROW({
     glob::glob g("*(abc");
   }, glob::Error);
 }
 
-TEST_F(GlobTestFixture, ErrorInvalidEscape) {
+TEST_F(GlobTestFixture, ErrorInvalidEscape_Throws) {
   EXPECT_THROW({
     glob::glob g("\\");
   }, glob::Error);
 }
 
-TEST_F(GlobTestFixture, ErrorInvalidRange) {
-  // These might throw or might be handled differently - test actual behavior
+TEST_F(GlobTestFixture, ErrorInvalidRange_Throws) {
   EXPECT_THROW({
     glob::glob g("[a-]");
   }, glob::Error);
 }
 
-TEST_F(GlobTestFixture, ErrorInvalidRangeStart) {
+TEST_F(GlobTestFixture, ErrorInvalidRangeStart_Throws) {
   EXPECT_THROW({
     glob::glob g("[-a]");
   }, glob::Error);
 }
+#endif
 
 // ============================================================================
 // MatchResults Tests
@@ -702,11 +764,21 @@ TEST_F(GlobTestFixture, BraceExpansionWithSets) {
   EXPECT_FALSE(glob::glob_match("file1.jpg", g));
 }
 
-TEST_F(GlobTestFixture, BraceExpansionErrorUnclosed) {
+#if GLOBCPP_NOEXCEPT_ENABLED
+TEST_F(GlobTestFixture, BraceExpansionErrorUnclosed_NoExcept) {
+  glob::glob g("*.{h,hpp");
+  // Pattern construction succeeds but creates a fail-safe automata
+  EXPECT_FALSE(glob::glob_match("file.h", g));
+  EXPECT_FALSE(glob::glob_match("file.hpp", g));
+  EXPECT_FALSE(glob::glob_match("*.{h,hpp", g));
+}
+#else
+TEST_F(GlobTestFixture, BraceExpansionErrorUnclosed_Throws) {
   EXPECT_THROW({
     glob::glob g("*.{h,hpp");
   }, glob::Error);
 }
+#endif
 
 TEST_F(GlobTestFixture, BraceExpansionEscaped) {
   glob::glob g("\\{test\\}");

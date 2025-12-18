@@ -22,55 +22,55 @@
 // ============================================================================
 // Exception Handling Policy Configuration
 // ============================================================================
-// Client controls exception handling via GLOBSTAR_NOEXCEPT_ENABLED:
+// Client controls exception handling via GLOBCPP_NOEXCEPT_ENABLED:
 //
-// GLOBSTAR_NOEXCEPT_ENABLED 1 (default):
+// GLOBCPP_NOEXCEPT_ENABLED 1 (default):
 //   - Public API functions are noexcept
 //   - Exceptions caught and logged internally
 //   - Safe fallback behavior on errors
 //
-// GLOBSTAR_NOEXCEPT_ENABLED 0:
+// GLOBCPP_NOEXCEPT_ENABLED 0:
 //   - Functions can throw
 //   - Exceptions propagate naturally
 //   - Better for debugging with full stack traces
 //
-// GLOBSTAR_EXCEPTION_LOG:
-//   - Customize logging (only used when GLOBSTAR_NOEXCEPT_ENABLED is 1)
+// GLOBCPP_EXCEPTION_LOG:
+//   - Customize logging (only used when GLOBCPP_NOEXCEPT_ENABLED is 1)
 //   - Default: logs to stderr using std::cerr
-//   - Example: #define GLOBSTAR_EXCEPTION_LOG(context, message) my_log(context, message)
+//   - Example: #define GLOBCPP_EXCEPTION_LOG(context, message) my_log(context, message)
 // ============================================================================
 
-#ifndef GLOBSTAR_NOEXCEPT_ENABLED
-  #define GLOBSTAR_NOEXCEPT_ENABLED 1
+#ifndef GLOBCPP_NOEXCEPT_ENABLED
+  #define GLOBCPP_NOEXCEPT_ENABLED 1
 #endif
 
-#if GLOBSTAR_NOEXCEPT_ENABLED
+#if GLOBCPP_NOEXCEPT_ENABLED
 
   // ========== NOEXCEPT MODE ==========
-  #define GLOBSTAR_NOEXCEPT noexcept
-  #define GLOBSTAR_TRY try
+  #define GLOBCPP_NOEXCEPT noexcept
+  #define GLOBCPP_TRY try
 
-  #ifndef GLOBSTAR_EXCEPTION_LOG
-    #define GLOBSTAR_EXCEPTION_LOG(context, ex_what) \
+  #ifndef GLOBCPP_EXCEPTION_LOG
+    #define GLOBCPP_EXCEPTION_LOG(context, ex_what) \
       std::cerr << "[glob-cpp] Exception in " << context << ": " << ex_what << std::endl
   #endif
 
-  #define GLOBSTAR_CATCH_AND_LOG(context) \
+  #define GLOBCPP_CATCH_AND_LOG(context) \
     catch (const std::exception& e) { \
-      GLOBSTAR_EXCEPTION_LOG(context, e.what()); \
+      GLOBCPP_EXCEPTION_LOG(context, e.what()); \
     } catch (...) { \
-      GLOBSTAR_EXCEPTION_LOG(context, "Unknown exception caught"); \
+      GLOBCPP_EXCEPTION_LOG(context, "Unknown exception caught"); \
     }
 
-#else // GLOBSTAR_NOEXCEPT_ENABLED
+#else // GLOBCPP_NOEXCEPT_ENABLED
 
   // ========== EXCEPTION PROPAGATION MODE ==========
-  #define GLOBSTAR_NOEXCEPT
-  #define GLOBSTAR_TRY
-  #define GLOBSTAR_CATCH_AND_LOG(context)
-  #define GLOBSTAR_EXCEPTION_LOG(context, ex_what) ((void)0)
+  #define GLOBCPP_NOEXCEPT
+  #define GLOBCPP_TRY
+  #define GLOBCPP_CATCH_AND_LOG(context)
+  #define GLOBCPP_EXCEPTION_LOG(context, ex_what) ((void)0)
 
-#endif // GLOBSTAR_NOEXCEPT_ENABLED
+#endif // GLOBCPP_NOEXCEPT_ENABLED
 
 namespace glob {
 
@@ -109,22 +109,39 @@ std::vector<String<charT>> split_path(const String<charT>& s, charT delim = stat
   return result;
 }
 
+// Helper to check if a string is exactly "**" (globstar pattern)
+template<class charT>
+bool is_globstar(const String<charT>& s) {
+  return s.length() == 2 && s[0] == static_cast<charT>('*') && s[1] == static_cast<charT>('*');
+}
+
 // Helper to collapse unescaped "**" to "*" in a string (Bash-like behavior).
 // - Only collapses exactly "**" (not more stars).
 // - Skips escaped sequences (e.g., "\\**" remains literal "**").
 // - 3+ stars remain literal (no collapse, per standard glob implementations).
 template<class charT>
 String<charT> collapse_stars(String<charT> s) {
+  if (s.length() < 2) {
+    return s;  // Nothing to collapse
+  }
+  
+  const charT star = static_cast<charT>('*');
+  const charT backslash = static_cast<charT>('\\');
+  
   size_t pos = 0;
-  while ((pos = s.find("**", pos)) != String<charT>::npos) {
-    // Skip if escaped
-    if (pos > 0 && s[pos - 1] == '\\') {
-      pos += 2;
-      continue;
+  while (pos + 1 < s.length()) {
+    if (s[pos] == star && s[pos + 1] == star) {
+      // Skip if escaped
+      if (pos > 0 && s[pos - 1] == backslash) {
+        pos += 2;
+        continue;
+      }
+      // Replace "**" with "*" (collapses to single any-char wildcard)
+      s.erase(pos, 1);  // Remove one star
+      pos += 1;  // Continue scanning from after replacement
+    } else {
+      pos++;
     }
-    // Replace "**" with "*" (collapses to single any-char wildcard)
-    s.replace(pos, 2, "*");
-    pos += 1;  // Continue scanning from after replacement
   }
   return s;
 }
@@ -2064,11 +2081,11 @@ class AstConsumer {
 template<class charT>
 class ExtendedGlob {
  public:
-  ExtendedGlob(const String<charT>& pattern) GLOBSTAR_NOEXCEPT {
-    GLOBSTAR_TRY {
+  ExtendedGlob(const String<charT>& pattern) GLOBCPP_NOEXCEPT {
+    GLOBCPP_TRY {
       pattern_parts_ = split_path(pattern);
       for (const auto& part : pattern_parts_) {
-        if (part == "**") {
+        if (is_globstar(part)) {
           has_globstar_ = true;
           break;
         }
@@ -2091,7 +2108,7 @@ class ExtendedGlob {
         is_globstar_part_.reserve(pattern_parts_.size());
 
         for (auto part : pattern_parts_) {
-          if (part == "**") {
+          if (is_globstar(part)) {
             // True recursive globstar component
             is_globstar_part_.push_back(true);
             part_matchers_.push_back(nullptr);
@@ -2105,7 +2122,7 @@ class ExtendedGlob {
       }
       return; // Success
     }
-    GLOBSTAR_CATCH_AND_LOG("ExtendedGlob::ExtendedGlob()")
+    GLOBCPP_CATCH_AND_LOG("ExtendedGlob::ExtendedGlob()")
     
     // Failure path: clear any partial state and create a safe always-fail automata
     has_globstar_ = false;
@@ -2204,12 +2221,12 @@ class ExtendedGlob {
 template<class charT>
 class SimpleGlob {
  public:
-  SimpleGlob(const String<charT>& pattern) GLOBSTAR_NOEXCEPT {
-    GLOBSTAR_TRY {
+  SimpleGlob(const String<charT>& pattern) GLOBCPP_NOEXCEPT {
+    GLOBCPP_TRY {
       Parser(pattern);
       return; // Success
     }
-    GLOBSTAR_CATCH_AND_LOG("SimpleGlob::SimpleGlob()")
+    GLOBCPP_CATCH_AND_LOG("SimpleGlob::SimpleGlob()")
 
     // Failure path: clear any partial state and create a safe always-fail automata
     automata_ = Automata<charT>();  // Reset to empty state
@@ -2298,7 +2315,7 @@ class MatchResults;
 template<class charT, class globT=extended_glob<charT>>
 class BasicGlob {
  public:
-  BasicGlob(const String<charT>& pattern) GLOBSTAR_NOEXCEPT
+  BasicGlob(const String<charT>& pattern) GLOBCPP_NOEXCEPT
    : glob_{pattern} {}
 
   BasicGlob(const BasicGlob&) = delete;
@@ -2317,28 +2334,28 @@ class BasicGlob {
   }
 
  private:
-  bool Exec(const String<charT>& str) GLOBSTAR_NOEXCEPT {
-    GLOBSTAR_TRY {
+  bool Exec(const String<charT>& str) GLOBCPP_NOEXCEPT {
+    GLOBCPP_TRY {
       return glob_.Exec(str);
     }
-    GLOBSTAR_CATCH_AND_LOG("BasicGlob::Exec()")
+    GLOBCPP_CATCH_AND_LOG("BasicGlob::Exec()")
     return false;  // Any execution error means no match
   }
 
   template<class charU, class globU>
   friend bool glob_match(const String<charU>& str,
-      BasicGlob<charU, globU>& glob) GLOBSTAR_NOEXCEPT;
+      BasicGlob<charU, globU>& glob) GLOBCPP_NOEXCEPT;
 
   template<class charU, class globU>
-  friend bool glob_match(const charU* str, BasicGlob<charU, globU>& glob) GLOBSTAR_NOEXCEPT;
+  friend bool glob_match(const charU* str, BasicGlob<charU, globU>& glob) GLOBCPP_NOEXCEPT;
 
   template<class charU, class globU>
   friend bool glob_match(const String<charU>& str, MatchResults<charU>& res,
-      BasicGlob<charU, globU>& glob) GLOBSTAR_NOEXCEPT;
+      BasicGlob<charU, globU>& glob) GLOBCPP_NOEXCEPT;
 
   template<class charU, class globU>
   friend bool glob_match(const charU* str, MatchResults<charU>& res,
-    BasicGlob<charU, globU>& glob) GLOBSTAR_NOEXCEPT;
+    BasicGlob<charU, globU>& glob) GLOBCPP_NOEXCEPT;
 
   globT glob_;
 };
@@ -2399,51 +2416,51 @@ class MatchResults {
 
   template<class charU, class globU>
   friend bool glob_match(const String<charU>& str,
-      BasicGlob<charU, globU>& glob) GLOBSTAR_NOEXCEPT;
+      BasicGlob<charU, globU>& glob) GLOBCPP_NOEXCEPT;
 
   template<class charU, class globU>
-  friend bool glob_match(const charU* str, BasicGlob<charU, globU>& glob) GLOBSTAR_NOEXCEPT;
+  friend bool glob_match(const charU* str, BasicGlob<charU, globU>& glob) GLOBCPP_NOEXCEPT;
 
   template<class charU, class globU>
   friend bool glob_match(const String<charU>& str, MatchResults<charU>& res,
-      BasicGlob<charU, globU>& glob) GLOBSTAR_NOEXCEPT;
+      BasicGlob<charU, globU>& glob) GLOBCPP_NOEXCEPT;
 
   template<class charU, class globU>
   friend bool glob_match(const charU* str, MatchResults<charU>& res,
-    BasicGlob<charU, globU>& glob) GLOBSTAR_NOEXCEPT;
+    BasicGlob<charU, globU>& glob) GLOBCPP_NOEXCEPT;
 
   std::vector<String<charT>> results_;
 };
 
 template<class charT, class globT=extended_glob<charT>>
-bool glob_match(const String<charT>& str, BasicGlob<charT, globT>& glob) GLOBSTAR_NOEXCEPT {
+bool glob_match(const String<charT>& str, BasicGlob<charT, globT>& glob) GLOBCPP_NOEXCEPT {
   return glob.Exec(str);
 }
 
 template<class charT, class globT=extended_glob<charT>>
-bool glob_match(const charT* str, BasicGlob<charT, globT>& glob) GLOBSTAR_NOEXCEPT {
+bool glob_match(const charT* str, BasicGlob<charT, globT>& glob) GLOBCPP_NOEXCEPT {
   return glob.Exec(str);
 }
 
 template<class charT, class globT=extended_glob<charT>>
 bool glob_match(const String<charT>& str, MatchResults<charT>& res,
-    BasicGlob<charT, globT>& glob) GLOBSTAR_NOEXCEPT {
+    BasicGlob<charT, globT>& glob) GLOBCPP_NOEXCEPT {
   bool r = glob.Exec(str);
-  GLOBSTAR_TRY {
+  GLOBCPP_TRY {
       res.SetResults(glob.GetAutomata().GetMatchedStrings());
   }
-  GLOBSTAR_CATCH_AND_LOG("glob_match() - SetResults")
+  GLOBCPP_CATCH_AND_LOG("glob_match() - SetResults")
   return r;
 }
 
 template<class charT, class globT=extended_glob<charT>>
 bool glob_match(const charT* str, MatchResults<charT>& res,
-    BasicGlob<charT, globT>& glob) GLOBSTAR_NOEXCEPT {
+    BasicGlob<charT, globT>& glob) GLOBCPP_NOEXCEPT {
   bool r = glob.Exec(str);
-  GLOBSTAR_TRY {
+  GLOBCPP_TRY {
     res.SetResults(glob.GetAutomata().GetMatchedStrings());
   }
-  GLOBSTAR_CATCH_AND_LOG("glob_match() - SetResults")
+  GLOBCPP_CATCH_AND_LOG("glob_match() - SetResults")
   return r;
 }
 
