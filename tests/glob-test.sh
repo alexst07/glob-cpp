@@ -1031,7 +1031,7 @@ echo ""
 
 echo "Test: Globstar With Non-Standalone **"
 test_glob "src/**.cpp" "src/foo.cpp" "true" "Globstar with non-standalone: src/**.cpp matches src/foo.cpp (collapses to src/*.cpp)"
-test_glob "src/**.cpp" "src/sub/foo.cpp" "true" "Globstar with non-standalone: src/**.cpp matches src/sub/foo.cpp"
+test_glob "src/**.cpp" "src/sub/foo.cpp" "false" "Globstar with non-standalone: src/**.cpp does not match src/sub/foo.cpp"
 test_glob "src/**.cpp" "src/foo.txt" "false" "Globstar with non-standalone: src/**.cpp does not match src/foo.txt"
 echo ""
 
