@@ -8,17 +8,6 @@
 #include <memory>
 #include <utility>
 
-#define GLOB_DEBUG 1
-
-#ifndef GLOB_DEBUG
-  #define GLOB_DEBUG 0
-#endif
-#if GLOB_DEBUG
-  #define GLOB_LOG(x) std::cerr << "[GLOB] " << x << std::endl
-#else
-  #define GLOB_LOG(x)
-#endif
-
 // ============================================================================
 // Exception Handling Policy Configuration
 // ============================================================================
@@ -292,10 +281,8 @@ class Automata {
   }
 
   std::tuple<bool, size_t> Match(size_t state_pos, size_t str_pos, const String<charT>& str, bool comp_end) {
-    GLOB_LOG("Match: state_pos=" << state_pos << ", str_pos=" << str_pos << ", char=" << (str_pos < str.length() ? str[str_pos] : 'E'));
   
     if (state_pos == match_state_) {
-      GLOB_LOG("Match: reached match_state, success");
       if (!comp_end || str_pos == str.length()) {
         return {true, str_pos};
       }
@@ -303,14 +290,12 @@ class Automata {
     }
     
     if (state_pos == fail_state_) {
-      GLOB_LOG("Match: fail_state, fail");
       return {false, 0};
     }
   
     State<charT>& state = *states_[state_pos];
   
     if (str_pos == str.length()) {
-      GLOB_LOG("Match: EOS, trying epsilon");
       if (state.Type() == StateType::MULT) {
         return Match(state.GetNextStates()[1], str_pos, str, comp_end);
       } else if (state.Type() == StateType::GROUP) {
@@ -339,13 +324,10 @@ class Automata {
     auto [next, new_pos] = state.Next(str, str_pos);
   
     if (next != fail_state_) {
-      GLOB_LOG("Match: consume success -> next=" << next << ", new_pos=" << new_pos);
       auto r = Match(next, new_pos, str, comp_end);
       if (std::get<0>(r)) {
-        GLOB_LOG("Match: consume branch succeeded");
         return r;
       }
-      GLOB_LOG("Match: consume branch failed");
     }
   
     state.SetMatchedStr(saved_matched);
@@ -373,28 +355,20 @@ class Automata {
     }
   
     if (has_alternative && epsilon_next != state_pos) {
-      GLOB_LOG("Match: trying standard epsilon -> epsilon_next=" << epsilon_next);
       auto r2 = Match(epsilon_next, str_pos, str, comp_end);
       if (std::get<0>(r2)) {
-        GLOB_LOG("Match: standard epsilon succeeded");
         return r2;
       }
-      GLOB_LOG("Match: standard epsilon failed");
     }
   
     if (new_pos == str_pos) {
-      GLOB_LOG("Match: zero consumption, forcing epsilon");
       if (has_alternative && epsilon_next != state_pos) {
         auto r2 = Match(epsilon_next, str_pos, str, comp_end);
         if (std::get<0>(r2)) {
-          GLOB_LOG("Match: zero-consume epsilon succeeded");
           return r2;
         }
-        GLOB_LOG("Match: zero-consume epsilon failed");
       }
     }
-  
-    GLOB_LOG("Match: no match for state_pos=" << state_pos);
     return {false, 0};
   }
                 
@@ -439,7 +413,6 @@ class Automata {
  private:
   std::tuple<bool, size_t> ExecAux(const String<charT>& str, bool comp_end = true) {
     auto r = Match(0, 0, str, comp_end);
-    GLOB_LOG("ExecAux: result=" << std::get<0>(r) << ", pos=" << std::get<1>(r));
     return r;
   }
   
@@ -737,33 +710,23 @@ class StateGroup: public State<charT> {
   }
 
   std::tuple<size_t, size_t> NextNeg(const String<charT>& str, size_t pos) {
-    const auto& next_states = GetNextStates();
-    GLOB_LOG("NextNeg: next_states.size()=" << next_states.size() 
-             << (next_states.size() > 0 ? ", [0]=" : "") << (next_states.size() > 0 ? std::to_string(next_states[0]) : "")
-             << (next_states.size() > 1 ? ", [1]=" : "") << (next_states.size() > 1 ? std::to_string(next_states[1]) : ""));
-    
+    const auto& next_states = GetNextStates();    
     if (pos >= str.length()) {
-      GLOB_LOG("NextNeg: pos >= length, taking epsilon");
       if (next_states.size() > 1) {
         return {next_states[1], pos};
       }
       return {GetAutomata().FailState(), pos};
     }
-  
-    GLOB_LOG("NextNeg: starting at pos=" << pos << ", char=" << str[pos]);
-  
+      
     for (auto& automata : automatas_) {
       bool r;
       std::tie(r, std::ignore) = automata->Exec(str.substr(pos), false);
-      GLOB_LOG("NextNeg: sub-automaton check: r=" << r);
   
       if (r) {
-        GLOB_LOG("NextNeg: sub-match found, failing negation");
         return {GetAutomata().FailState(), pos};
       }
     }
   
-    GLOB_LOG("NextNeg: no match, consuming 1, returning [0]=" << next_states[0]);
     this->SetMatchedStr(this->MatchedStr() + str[pos]);
     return {next_states[0], pos + 1};
   }
@@ -1997,15 +1960,11 @@ class AstConsumer {
         state_group_type = StateGroup<charT>::Type::NEG;
         break;
     }
-  
-    GLOB_LOG("ExecGroup: creating group type=" << (int)state_group_type);
-  
+    
     // Create state and get its position
     current_state_ = automata.template NewState<StateGroup<charT>>(
         state_group_type, std::move(automatas));
-    
-    GLOB_LOG("ExecGroup: created state " << current_state_);
-  
+      
     // For repeating groups (STAR, PLUS, ANY, NEG), add self-loop as FIRST next state
     bool needs_self_loop = (state_group_type == StateGroup<charT>::Type::STAR ||
                             state_group_type == StateGroup<charT>::Type::PLUS ||
@@ -2013,20 +1972,15 @@ class AstConsumer {
                             state_group_type == StateGroup<charT>::Type::NEG);
     
     if (needs_self_loop) {
-      GLOB_LOG("ExecGroup: adding self-loop to state " << current_state_);
       automata.GetState(current_state_).AddNextState(current_state_);
     }
     
     // Link from previous state (this adds as SECOND next state for repeating groups)
     if (preview_state_ >= 0) {
-      GLOB_LOG("ExecGroup: linking preview " << preview_state_ << " -> current " << current_state_);
       automata.GetState(preview_state_).AddNextState(current_state_);
     }
     
-    preview_state_ = current_state_;
-    
-    const auto& ns = automata.GetState(current_state_).GetNextStates();
-    GLOB_LOG("ExecGroup: state " << current_state_ << " has " << ns.size() << " next states");
+    preview_state_ = current_state_;    
   }
   
   std::vector<std::unique_ptr<Automata<charT>>> ExecUnion(
