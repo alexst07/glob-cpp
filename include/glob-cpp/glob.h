@@ -846,7 +846,7 @@ inline std::ostream& operator<<(std::ostream& stream,
 template<class charT>
 class Lexer {
  public:
-  static const char kEndOfInput = -1;
+  static const charT kEndOfInput = 0; // null-terminated C-strings naturally end with 0
 
   Lexer(const String<charT>& str): str_(str), c_{str.empty() ? kEndOfInput : str[0]}  {}
 
