@@ -72,6 +72,11 @@ class Automata;
 template<class charT>
 class StateGroup;
 
+template <class charT>
+struct CharConst {
+  static const charT kPathSeparator = static_cast<charT>('/');
+};
+
 class Error: public std::exception {
  public:
   Error(const std::string& msg): msg_{msg} {}
@@ -84,7 +89,8 @@ class Error: public std::exception {
 };
 
 template<class charT>
-std::vector<String<charT>> split_path(const String<charT>& s, charT delim = static_cast<charT>('/')) {
+std::vector<String<charT>> split_path(const String<charT>& s,
+                                      charT delim = CharConst<charT>::kPathSeparator) {
   // Splits on delim, preserves empty components including empty ones (important for trailing '/')
   std::vector<String<charT>> result;
   size_t start = 0;
@@ -415,7 +421,7 @@ class Automata {
     auto r = Match(0, 0, str, comp_end);
     return r;
   }
-  
+
   void ResetStates() {
     for (auto& state : states_) {
       state->ResetState();
@@ -488,7 +494,7 @@ class StateStar : public State<charT> {
     : State<charT>(StateType::MULT, states){}
 
   bool Check(const String<charT>& str, size_t pos) override {
-    return (str[pos] != static_cast<charT>('/'));
+    return (str[pos] != CharConst<charT>::kPathSeparator);
   }
 
   std::tuple<size_t, size_t> Next(const String<charT>& str, size_t pos) override {
@@ -496,7 +502,7 @@ class StateStar : public State<charT> {
       return {GetNextStates()[1], pos};  // Exit at end
     }
     
-    if (str[pos] == '/') {
+    if (str[pos] == CharConst<charT>::kPathSeparator) {
     	return {GetAutomata().FailState(), pos};  // Don't cross path sep
   	}
   	
@@ -730,7 +736,7 @@ class StateGroup: public State<charT> {
     this->SetMatchedStr(this->MatchedStr() + str[pos]);
     return {next_states[0], pos + 1};
   }
-    
+  
   std::tuple<size_t, size_t> NextBasic(const String<charT>& str, size_t pos) {
     bool r;
     size_t new_pos;
@@ -1938,24 +1944,29 @@ class AstConsumer {
     AstNode<charT>* union_node = group_node->GetGlob();
     std::vector<std::unique_ptr<Automata<charT>>> automatas =
         ExecUnion(union_node);
-  
+
     typename StateGroup<charT>::Type state_group_type;
     switch (group_node->GetGroupType()) {
       case GroupNode<charT>::GroupType::BASIC:
         state_group_type = StateGroup<charT>::Type::BASIC;
         break;
+
       case GroupNode<charT>::GroupType::ANY:
         state_group_type = StateGroup<charT>::Type::ANY;
         break;
+
       case GroupNode<charT>::GroupType::STAR:
         state_group_type = StateGroup<charT>::Type::STAR;
         break;
+
       case GroupNode<charT>::GroupType::PLUS:
         state_group_type = StateGroup<charT>::Type::PLUS;
         break;
+
       case GroupNode<charT>::GroupType::AT:
         state_group_type = StateGroup<charT>::Type::AT;
         break;
+
       case GroupNode<charT>::GroupType::NEG:
         state_group_type = StateGroup<charT>::Type::NEG;
         break;
@@ -1982,7 +1993,7 @@ class AstConsumer {
     
     preview_state_ = current_state_;    
   }
-  
+
   std::vector<std::unique_ptr<Automata<charT>>> ExecUnion(
       AstNode<charT>* node) {
     UnionNode<charT>* union_node = static_cast<UnionNode<charT>*>(node);
