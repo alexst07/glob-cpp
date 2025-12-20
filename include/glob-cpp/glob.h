@@ -69,6 +69,14 @@ using String = std::basic_string<charT>;
 template<class charT>
 class Automata;
 
+template<class charT>
+class StateGroup;
+
+template <class charT>
+struct CharConst {
+  static const charT kPathSeparator = static_cast<charT>('/');
+};
+
 class Error: public std::exception {
  public:
   Error(const std::string& msg): msg_{msg} {}
@@ -81,7 +89,8 @@ class Error: public std::exception {
 };
 
 template<class charT>
-std::vector<String<charT>> split_path(const String<charT>& s, charT delim = static_cast<charT>('/')) {
+std::vector<String<charT>> split_path(const String<charT>& s,
+                                      charT delim = CharConst<charT>::kPathSeparator) {
   // Splits on delim, preserves empty components including empty ones (important for trailing '/')
   std::vector<String<charT>> result;
   size_t start = 0;
@@ -179,7 +188,7 @@ class State {
 
   virtual void ResetState() {}
 
- protected:
+ public:
   void SetMatchedStr(const String<charT>& str) {
     matched_str_ = str;
   }
@@ -277,6 +286,98 @@ class Automata {
     return *this;
   }
 
+  std::tuple<bool, size_t> Match(size_t state_pos, size_t str_pos, const String<charT>& str, bool comp_end) {
+  
+    if (state_pos == match_state_) {
+      if (!comp_end || str_pos == str.length()) {
+        return {true, str_pos};
+      }
+      return {false, 0};
+    }
+    
+    if (state_pos == fail_state_) {
+      return {false, 0};
+    }
+  
+    State<charT>& state = *states_[state_pos];
+  
+    if (str_pos == str.length()) {
+      if (state.Type() == StateType::MULT) {
+        return Match(state.GetNextStates()[1], str_pos, str, comp_end);
+      } else if (state.Type() == StateType::GROUP) {
+        StateGroup<charT>& group = static_cast<StateGroup<charT>&>(state);
+        if (group.GetType() == StateGroup<charT>::Type::STAR ||
+            group.GetType() == StateGroup<charT>::Type::ANY ||
+            group.GetType() == StateGroup<charT>::Type::BASIC ||
+            group.GetType() == StateGroup<charT>::Type::NEG ||
+            group.GetType() == StateGroup<charT>::Type::AT) {
+          auto [next, new_pos] = state.Next(str, str_pos);
+          if (new_pos == str_pos) {
+            return Match(next, new_pos, str, comp_end);
+          }
+        }
+        if (group.GetType() == StateGroup<charT>::Type::PLUS) {
+          auto [next, new_pos] = state.Next(str, str_pos);
+          if (new_pos == str_pos) {
+            return Match(next, new_pos, str, comp_end);
+          }
+        }
+      }
+      return {false, 0};
+    }
+  
+    String<charT> saved_matched = state.MatchedStr();
+    auto [next, new_pos] = state.Next(str, str_pos);
+  
+    if (next != fail_state_) {
+      auto r = Match(next, new_pos, str, comp_end);
+      if (std::get<0>(r)) {
+        return r;
+      }
+    }
+  
+    state.SetMatchedStr(saved_matched);
+  
+    // Epsilon alternative
+    bool has_alternative = false;
+    size_t epsilon_next = 0;
+    if (state.Type() == StateType::MULT) {
+      const auto& next_states = state.GetNextStates();
+      if (next_states.size() > 1) {
+        has_alternative = true;
+        epsilon_next = next_states[1];
+      }
+    } else if (state.Type() == StateType::GROUP) {
+      const StateGroup<charT>& group = static_cast<const StateGroup<charT>&>(state);
+      const auto& next_states = state.GetNextStates();
+      
+      // PLUS can only take epsilon if it has matched at least once
+      if (group.GetType() == StateGroup<charT>::Type::PLUS) {
+        has_alternative = false;
+      } else if (next_states.size() > 1) {
+        has_alternative = true;
+        epsilon_next = next_states[1];
+      }
+    }
+  
+    if (has_alternative && epsilon_next != state_pos) {
+      auto r2 = Match(epsilon_next, str_pos, str, comp_end);
+      if (std::get<0>(r2)) {
+        return r2;
+      }
+    }
+  
+    if (new_pos == str_pos) {
+      if (has_alternative && epsilon_next != state_pos) {
+        auto r2 = Match(epsilon_next, str_pos, str, comp_end);
+        if (std::get<0>(r2)) {
+          return r2;
+        }
+      }
+    }
+    return {false, 0};
+  }
+                
   size_t GetNumStates() const {
     return states_.size();
   }
@@ -316,56 +417,9 @@ class Automata {
 
   size_t fail_state_;
  private:
-  std::tuple<bool, size_t> ExecAux(const String<charT>& str,
-      bool comp_end = true) const {
-    size_t state_pos = 0;
-    size_t str_pos = 0;
-
-    // run the state vector until state reaches fail or match state, or
-    // until the string is all consumed
-    while (state_pos != fail_state_ && state_pos != match_state_
-           && str_pos < str.length()) {
-      std::tie(state_pos, str_pos) = states_[state_pos]->Next(str, str_pos);
-    }
-
-    // If we've consumed the entire string but haven't reached match or fail state,
-    // check if we're at a state that can transition to MATCH without consuming more input
-    if (str_pos == str.length() && state_pos != fail_state_ && state_pos != match_state_) {
-      State<charT>& current_state = *states_[state_pos];
-      StateType state_type = current_state.Type();
-      
-      if (state_type == StateType::MULT) {
-        // Handle star state: check if it has MATCH as its next state (index 1)
-        const auto& next_states = current_state.GetNextStates();
-        if (next_states.size() > 1 && states_[next_states[1]]->Type() == StateType::MATCH) {
-          state_pos = next_states[1];
-        }
-      } else if (state_type == StateType::GROUP) {
-        // Handle group state: it may match empty alternative (e.g., {,.bak})
-        // Call Next() which is safe for StateGroup
-        size_t next_state_pos, next_str_pos;
-        std::tie(next_state_pos, next_str_pos) = current_state.Next(str, str_pos);
-        
-        // If the transition goes to match state or doesn't consume input, take it
-        if (next_state_pos == match_state_ || next_str_pos == str_pos) {
-          state_pos = next_state_pos;
-          str_pos = next_str_pos;
-        }
-      }
-    }
-
-    // if comp_end is true it matches only if the automata reached the end of
-    // the string
-    bool result = false;
-    if (comp_end) {
-      result = (state_pos == match_state_) && (str_pos == str.length());
-    } else {
-      // if comp_end is false, compare only if the states reached the
-      // match state
-      result = (state_pos == match_state_);
-    }
-    
-    return std::tuple<bool, size_t>(result, str_pos);
+  std::tuple<bool, size_t> ExecAux(const String<charT>& str, bool comp_end = true) {
+    auto r = Match(0, 0, str, comp_end);
+    return r;
   }
 
   void ResetStates() {
@@ -440,32 +494,20 @@ class StateStar : public State<charT> {
     : State<charT>(StateType::MULT, states){}
 
   bool Check(const String<charT>& str, size_t pos) override {
-    (void)str; (void)pos;
-    // as it match any char, it is always trye
-    return true;
+    return (str[pos] != CharConst<charT>::kPathSeparator);
   }
 
-  std::tuple<size_t, size_t> Next(const String<charT>& str,
-      size_t pos) override {
-    // next state vector from StateStar has two elements, the element 0 points
-    // to the same state, and the element points to next state if the
-    // conditions is satisfied
-    if (GetAutomata().GetState(GetNextStates()[1]).Type() == StateType::MATCH) {
-      // this case occurs when star is in the end of the glob, so the pos is
-      // the end of the string, because all string is consumed
-      this->SetMatchedStr(str.substr(pos));
-      return std::tuple<size_t, size_t>(GetNextStates()[1], str.length());
+  std::tuple<size_t, size_t> Next(const String<charT>& str, size_t pos) override {
+    if (pos >= str.length()) {
+      return {GetNextStates()[1], pos};  // Exit at end
     }
-
-    bool res = GetAutomata().GetState(GetNextStates()[1]).Check(str, pos);
-    // if the next state is satisfied goes to next state
-    if (res) {
-      return std::tuple<size_t, size_t>(GetNextStates()[1], pos);
-    }
-
-    // while the next state check is false, the string is consumed by star state
+    
+    if (str[pos] == CharConst<charT>::kPathSeparator) {
+    	return {GetAutomata().FailState(), pos};  // Don't cross path sep
+  	}
+  	
     this->SetMatchedStr(this->MatchedStr() + str[pos]);
-    return std::tuple<size_t, size_t>(GetNextStates()[0], pos + 1);
+    return {GetNextStates()[0], pos + 1};  // Greedy consume, backtrack handles exit
   }
 };
 
@@ -577,6 +619,8 @@ class StateGroup: public State<charT> {
     match_one_ = false;
   }
 
+  Type GetType() const { return type_; }
+
   std::tuple<bool, size_t> BasicCheck(const String<charT>& str,
       size_t pos) {
     String<charT> str_part = str.substr(pos);
@@ -672,37 +716,25 @@ class StateGroup: public State<charT> {
   }
 
   std::tuple<size_t, size_t> NextNeg(const String<charT>& str, size_t pos) {
-      if (pos >= str.length()) {
-          return std::tuple<size_t, size_t>(GetAutomata().FailState(), pos);
+    const auto& next_states = GetNextStates();    
+    if (pos >= str.length()) {
+      if (next_states.size() > 1) {
+        return {next_states[1], pos};
       }
+      return {GetAutomata().FailState(), pos};
+    }
+      
+    for (auto& automata : automatas_) {
+      bool r;
+      std::tie(r, std::ignore) = automata->Exec(str.substr(pos), false);
   
-      bool any_match = false;
-      size_t longest_failed = 0;
-  
-      for (auto& automata : automatas_) {
-          bool r;
-          size_t consumed;
-          std::tie(r, consumed) = automata->Exec(str.substr(pos), false);
-  
-          if (r) {
-              any_match = true;
-              // Can early-exit: one match fails the whole negation
-              break;
-          }
-          // Track longest prefix that failed this alternative
-          if (consumed > longest_failed) {
-              longest_failed = consumed;
-          }
+      if (r) {
+        return {GetAutomata().FailState(), pos};
       }
+    }
   
-      if (any_match) {
-          return std::tuple<size_t, size_t>(GetAutomata().FailState(), pos);
-      }
-  
-      // None matched - negation succeeds, consume longest failed prefix
-      // For char classes = 1, for strings = length until mismatch
-      this->SetMatchedStr(str.substr(pos, longest_failed));
-      return std::tuple<size_t, size_t>(GetNextStates()[0], pos + longest_failed);  // 0 for non-repeating NEGATIVE groups: !(...)
+    this->SetMatchedStr(this->MatchedStr() + str[pos]);
+    return {next_states[0], pos + 1};
   }
   
   std::tuple<size_t, size_t> NextBasic(const String<charT>& str, size_t pos) {
@@ -1939,15 +1971,27 @@ class AstConsumer {
         state_group_type = StateGroup<charT>::Type::NEG;
         break;
     }
-
-    NewState<StateGroup<charT>>(automata, state_group_type,
-        std::move(automatas));
-    // skip BASIC (and potentially AT/NEG if non-repeating)
-    if (state_group_type != StateGroup<charT>::Type::BASIC &&
-        state_group_type != StateGroup<charT>::Type::AT &&
-        state_group_type != StateGroup<charT>::Type::NEG) {
+    
+    // Create state and get its position
+    current_state_ = automata.template NewState<StateGroup<charT>>(
+        state_group_type, std::move(automatas));
+      
+    // For repeating groups (STAR, PLUS, ANY, NEG), add self-loop as FIRST next state
+    bool needs_self_loop = (state_group_type == StateGroup<charT>::Type::STAR ||
+                            state_group_type == StateGroup<charT>::Type::PLUS ||
+                            state_group_type == StateGroup<charT>::Type::ANY ||
+                            state_group_type == StateGroup<charT>::Type::NEG);
+    
+    if (needs_self_loop) {
       automata.GetState(current_state_).AddNextState(current_state_);
-    }  
+    }
+    
+    // Link from previous state (this adds as SECOND next state for repeating groups)
+    if (preview_state_ >= 0) {
+      automata.GetState(preview_state_).AddNextState(current_state_);
+    }
+    
+    preview_state_ = current_state_;    
   }
 
   std::vector<std::unique_ptr<Automata<charT>>> ExecUnion(
