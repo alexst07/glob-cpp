@@ -7,10 +7,20 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		1DC688272EECEA100042C363 /* string-match-cli.cc in Sources */ = {isa = PBXBuildFile; fileRef = 1DC688262EECEA100042C363 /* string-match-cli.cc */; };
+		1DB3D5E12EF52BFC008CD65D /* wglob-cli.cc in Sources */ = {isa = PBXBuildFile; fileRef = 1DB3D5E02EF52BFC008CD65D /* wglob-cli.cc */; };
+		1DC688272EECEA100042C363 /* glob-cli.cc in Sources */ = {isa = PBXBuildFile; fileRef = 1DC688262EECEA100042C363 /* glob-cli.cc */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		1DB3D5D72EF52B65008CD65D /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
 		1DC687F12EE818870042C363 /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -23,8 +33,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		1DB3D5DB2EF52B65008CD65D /* wglob */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = wglob; sourceTree = BUILT_PRODUCTS_DIR; };
+		1DB3D5E02EF52BFC008CD65D /* wglob-cli.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "wglob-cli.cc"; sourceTree = "<group>"; };
 		1DC687F32EE818870042C363 /* glob */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = glob; sourceTree = BUILT_PRODUCTS_DIR; };
-		1DC688262EECEA100042C363 /* string-match-cli.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "string-match-cli.cc"; sourceTree = "<group>"; };
+		1DC688262EECEA100042C363 /* glob-cli.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = "glob-cli.cc"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -37,6 +49,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		1DB3D5D62EF52B65008CD65D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1DC687F02EE818870042C363 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -50,7 +69,8 @@
 		1DC687EA2EE818870042C363 = {
 			isa = PBXGroup;
 			children = (
-				1DC688262EECEA100042C363 /* string-match-cli.cc */,
+				1DC688262EECEA100042C363 /* glob-cli.cc */,
+				1DB3D5E02EF52BFC008CD65D /* wglob-cli.cc */,
 				1DC687F42EE818870042C363 /* Products */,
 				1DC688312EECEB510042C363 /* include */,
 			);
@@ -60,6 +80,7 @@
 			isa = PBXGroup;
 			children = (
 				1DC687F32EE818870042C363 /* glob */,
+				1DB3D5DB2EF52B65008CD65D /* wglob */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -67,6 +88,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		1DB3D5D32EF52B65008CD65D /* wglob */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1DB3D5D82EF52B65008CD65D /* Build configuration list for PBXNativeTarget "wglob" */;
+			buildPhases = (
+				1DB3D5D42EF52B65008CD65D /* Sources */,
+				1DB3D5D62EF52B65008CD65D /* Frameworks */,
+				1DB3D5D72EF52B65008CD65D /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				1DC688312EECEB510042C363 /* include */,
+			);
+			name = wglob;
+			packageProductDependencies = (
+			);
+			productName = glob;
+			productReference = 1DB3D5DB2EF52B65008CD65D /* wglob */;
+			productType = "com.apple.product-type.tool";
+		};
 		1DC687F22EE818870042C363 /* glob */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1DC687FA2EE818870042C363 /* Build configuration list for PBXNativeTarget "glob" */;
@@ -118,22 +161,49 @@
 			projectRoot = "";
 			targets = (
 				1DC687F22EE818870042C363 /* glob */,
+				1DB3D5D32EF52B65008CD65D /* wglob */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
+		1DB3D5D42EF52B65008CD65D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1DB3D5E12EF52BFC008CD65D /* wglob-cli.cc in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1DC687EF2EE818870042C363 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				1DC688272EECEA100042C363 /* string-match-cli.cc in Sources */,
+				1DC688272EECEA100042C363 /* glob-cli.cc in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		1DB3D5D92EF52B65008CD65D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				HEADER_SEARCH_PATHS = ../include;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		1DB3D5DA2EF52B65008CD65D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				HEADER_SEARCH_PATHS = ../include;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
 		1DC687F82EE818870042C363 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -270,6 +340,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		1DB3D5D82EF52B65008CD65D /* Build configuration list for PBXNativeTarget "wglob" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1DB3D5D92EF52B65008CD65D /* Debug */,
+				1DB3D5DA2EF52B65008CD65D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		1DC687EE2EE818870042C363 /* Build configuration list for PBXProject "glob" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
