@@ -836,8 +836,8 @@ echo ""
 echo "Test: BraceExpansionErrorUnclosed"
 # Note: Shell doesn't throw exceptions, but we can test that unclosed braces don't match
 # In bash, unclosed braces are treated as literal characters
-test_glob "*.{h,hpp" "file.h" "false" "BraceExpansionErrorUnclosed: *.{h,hpp (unclosed) does not match file.h"
-test_glob "*.{h,hpp" "file.{h,hpp" "true" "BraceExpansionErrorUnclosed: *.{h,hpp (unclosed) matches literal *.{h,hpp"
+test_glob "*.{h,hpp" "file.h" "false" "BraceExpansionErrorUnclosed: Invalid unclosed '*.{h,hpp' does not match 'file.h'"
+test_glob "*.{h,hpp" "file.{h,hpp" "false" "BraceExpansionErrorUnclosed: Invalid unclosed '*.{h,hpp'. Escape to treat as literal"
 echo ""
 
 # Test: BraceExpansionEscaped
@@ -889,7 +889,7 @@ test_glob_brace "{outer{inner,}}" "outer" "true" "{outer{inner,}} matches outer 
 test_glob_brace "{outer{inner,}}" "outerinner" "true" "{outer{inner,}} matches outerinner"
 echo ""
 
-echo "Test: Brace Expansion - Empty at Pattern End"
+echo "Test: Brace Expansion - Invalid Empty at Pattern End"
 test_glob_brace "log{" "" "false" "'log{' does not match empty string (incomplete brace)"
 # Note: if parser rejects incomplete brace, this test should fail compilation; otherwise behavior defined
 test_glob_brace "file{" "file" "false" "'file{' does not match file (incomplete brace)"
@@ -897,28 +897,27 @@ echo ""
 
 echo "Test: Brace Expansion - Anomalous/Invalid Patterns (should reject or literal)"
 # These test parser robustness – should either throw Error or treat as literal
-test_glob "file{a,b" "file{a,b" "true" "Unclosed brace treated as literal"
+test_glob "file{a,b" "file{a,b" "false" "Invalid unbalanced brace. Escape to treat as literal"
 test_glob "file{a,b" "filea" "false" "Unclosed brace does not expand"
-test_glob "file}" "file}" "true" "Lone '}' is literal"
 test_glob "file{a,,b}" "filea" "true" "file{a,,b} allows double comma"
 test_glob "file{a,,b}" "file" "true" "file{a,,b} matches file (empty allowed)"
 echo ""
 
 echo "Test: Brace Expansion - Incomplete / Unbalanced"
 # Complete brace followed by literal '{'
-test_glob "{a,b}{" "a{" "true" "{a,b}{ matches a{ (trailing { literal)"
-test_glob "{a,b}{" "b{" "true" "{a,b}{ matches b{"
+test_glob "{a,b}{" "a{" "false" "{a,b}{ matches a{ (trailing { literal)"
+test_glob "{a,b}{" "b{" "false" "{a,b}{ matches b{"
 test_glob "{a,b}{" "{a,b}{" "false" "{a,b}{ does not match literal {a,b}{"
 test_glob "{a,b}{" "ax" "false" "{a,b}{ does not match ax"
 
 # Truly incomplete (unclosed) brace – should either error or treat as literal
-test_glob "{a,b" "{a,b" "true" "Unclosed brace {a,b treated as literal (fallback)"
-test_glob "{a,b" "ab" "false" "Unclosed brace does not expand"
-test_glob "file{a,b" "filea" "false" "Unclosed brace no expansion"
+test_glob "{a,b" "{a,b" "false" "Invalid unclosed brace '{a,b'. Escape to treat as literal"
+test_glob "{a,b" "ab" "false" "Invalid unclosed brace does not expand"
+test_glob "file{a,b" "filea" "false" "Invalid unclosed brace no expansion"
 
 # Lone stray braces
-test_glob "file}" "file}" "true" "Lone } is literal"
-test_glob "{file" "{file" "true" "Unopened { treated as literal"
+test_glob "file}" "file}" "false" "Invalid lone '}'. Escape to treat as literal"
+test_glob "{file" "{file" "false" "Invalid unbalanced '{'. Escape to treat as literal"
 echo ""
 
 echo "Test: Brace Expansion - With Other Wildcards at Boundaries"
