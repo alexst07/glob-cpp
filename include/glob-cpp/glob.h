@@ -880,7 +880,7 @@ class Lexer {
  public:
   static const charT kEndOfInput = 0; // null-terminated C-strings naturally end with 0
 
-  Lexer(const String<charT>& str): str_(str), c_{str.empty() ? kEndOfInput : str[0]}  {}
+  Lexer(const String<charT>& str): str_(str), c_{str.empty() ? kEndOfInput : str[0]} {}
 
   std::vector<Token<charT>> Scanner() {
     std::vector<Token<charT>> tokens;
@@ -889,7 +889,7 @@ class Lexer {
         case '?': {
           Advance();
           if (c_ == '(') {
-            paren_depth_++;
+            scope_stack_.push_back('(');
             tokens.push_back(Select(TokenKind::QUESTLPAREN));
             Advance();
           } else {
@@ -901,7 +901,7 @@ class Lexer {
         case '*': {
           Advance();
           if (c_ == '(') {
-            paren_depth_++;
+            scope_stack_.push_back('(');
             tokens.push_back(Select(TokenKind::STARLPAREN));
             Advance();
           } else {
@@ -910,16 +910,16 @@ class Lexer {
           break;
         }
 
-		case '{': {
-          brace_depth_++;
+        case '{': {
+          scope_stack_.push_back('{');
           tokens.push_back(Select(TokenKind::LBRACE));
           Advance();
           break;
         }
 
         case '}': {
-          if (brace_depth_ > 0) {
-            brace_depth_--;
+          if (!scope_stack_.empty() && scope_stack_.back() == '{') {
+            scope_stack_.pop_back();
           }
           tokens.push_back(Select(TokenKind::RBRACE));
           Advance();
@@ -929,7 +929,7 @@ class Lexer {
         case '+': {
           Advance();
           if (c_ == '(') {
-            paren_depth_++;
+            scope_stack_.push_back('(');
             tokens.push_back(Select(TokenKind::PLUSLPAREN));
             Advance();
           } else {
@@ -937,21 +937,18 @@ class Lexer {
           }
           break;
         }
-
+        
         case '-': {
-          // Only SUB inside brackets, otherwise regular char
-          if (bracket_depth_ > 0) {
-            tokens.push_back(Select(TokenKind::SUB));
-          } else {
-            tokens.push_back(Select(TokenKind::CHAR, '-'));
-          }
+          // Note: '-' inside brackets is handled by ScanBracketExpression()
+          // This case only handles '-' outside of bracket expressions
+          tokens.push_back(Select(TokenKind::CHAR, '-'));
           Advance();
           break;
         }
-
+        
         case '|': {
           // Only UNION inside parentheses, otherwise regular char
-          if (paren_depth_ > 0) {
+          if (IsInnermost('(')) {
             tokens.push_back(Select(TokenKind::UNION));
           } else {
             tokens.push_back(Select(TokenKind::CHAR, '|'));
@@ -962,7 +959,7 @@ class Lexer {
         
         case ',': {
           // Only UNION inside braces, otherwise regular char
-          if (brace_depth_ > 0) {
+          if (IsInnermost('{')) {
             tokens.push_back(Select(TokenKind::UNION));
           } else {
             tokens.push_back(Select(TokenKind::CHAR, ','));
@@ -974,7 +971,7 @@ class Lexer {
         case '@': {
           Advance();
           if (c_ == '(') {
-            paren_depth_++;
+            scope_stack_.push_back('(');
             tokens.push_back(Select(TokenKind::ATLPAREN));
             Advance();
           } else {
@@ -986,7 +983,7 @@ class Lexer {
         case '!': {
           Advance();
           if (c_ == '(') {
-            paren_depth_++;
+            scope_stack_.push_back('(');
             tokens.push_back(Select(TokenKind::NEGLPAREN));
             Advance();
           } else {
@@ -996,15 +993,15 @@ class Lexer {
         }
 
         case '(': {
-          paren_depth_++;
+          scope_stack_.push_back('(');
           tokens.push_back(Select(TokenKind::LPAREN));
           Advance();
           break;
         }
 
         case ')': {
-          if (paren_depth_ > 0) {
-            paren_depth_--;
+          if (!scope_stack_.empty() && scope_stack_.back() == '(') {
+            scope_stack_.pop_back();
           }
           tokens.push_back(Select(TokenKind::RPAREN));
           Advance();
@@ -1012,29 +1009,22 @@ class Lexer {
         }
 
         case '[': {
-          bracket_depth_++;
-          Advance();
-          if (c_ == '!') {
-            tokens.push_back(Select(TokenKind::NEGLBRACKET));
-            Advance();
-          } else {
-            tokens.push_back(Select(TokenKind::LBRACKET));
-          }
+          ScanBracketExpression(tokens);
           break;
         }
 
         case ']': {
-          if (bracket_depth_ > 0) {
-                bracket_depth_--;
+          if (!scope_stack_.empty() && scope_stack_.back() == '[') {
+            scope_stack_.pop_back();
           }
           tokens.push_back(Select(TokenKind::RBRACKET));
           Advance();
           break;
         }
 
-		case '.': {
+        case '.': {
           // Only treat '..' as DOTDOT if we're inside braces
-          if (brace_depth_ > 0) {
+          if (IsInnermost('{')) {
             Advance();
             if (c_ == '.') {
               tokens.push_back(Select(TokenKind::DOTDOT));
@@ -1076,6 +1066,55 @@ class Lexer {
   }
 
  private:
+  // Scan a bracket expression where all characters are literal except '-' for ranges
+  // Examples: [abc], [a-z], [!abc], [^abc], [a-zA-Z0-9]
+  void ScanBracketExpression(std::vector<Token<charT>>& tokens) {
+    scope_stack_.push_back('[');
+    Advance();
+    
+    // Check for negation (both ! and ^ are supported)
+    if (c_ == '!' || c_ == '^') {
+      tokens.push_back(Select(TokenKind::NEGLBRACKET));
+      Advance();
+    } else {
+      tokens.push_back(Select(TokenKind::LBRACKET));
+    }
+    
+    // Track the previous character to determine if '-' forms a valid range
+    bool has_prev_char = false;
+    
+    // Scan until we find the closing ']'
+    while (c_ != kEndOfInput && c_ != ']') {
+      if (c_ == '-') {
+        // '-' is only a range operator if:
+        // 1. There was a previous character (has_prev_char == true)
+        // 2. There is a next character (peek ahead)
+        // Otherwise it's a literal '-'
+        
+        // Peek ahead to see if there's a character after '-'
+        size_t next_pos = pos_ + 1;
+        bool has_next_char = (next_pos < str_.length() && str_[next_pos] != ']');
+        
+        if (has_prev_char && has_next_char) {
+          // Valid range: a-z
+          tokens.push_back(Select(TokenKind::SUB));
+          Advance();
+          has_prev_char = false; // Range consumed the previous char
+        } else {
+          // Literal '-': at start like [-abc], at end like [abc-], or alone like [-]
+          tokens.push_back(Select(TokenKind::CHAR, c_));
+          Advance();
+          has_prev_char = true;
+        }
+      } else {
+        tokens.push_back(Select(TokenKind::CHAR, c_));
+        Advance();
+        has_prev_char = true;
+      }
+    }
+    
+    // The closing ']' will be handled by the main scanner loop
+  }
   inline Token<charT> Select(TokenKind k) {
     return Token<charT>(k);
   }
@@ -1111,14 +1150,16 @@ class Lexer {
     return b;
   }
 
+  // Check if the innermost open delimiter is the specified character
+  inline bool IsInnermost(charT delimiter) const {
+    return !scope_stack_.empty() && scope_stack_.back() == delimiter;
+  }
+
   String<charT> str_;
   size_t pos_ = 0;
   charT c_;
-  int brace_depth_ = 0; // tracks {} nesting
-  int paren_depth_ = 0; // tracks () nesting
-  int bracket_depth_ = 0; // tracks [] nesting
+  std::vector<charT> scope_stack_;  // Stack tracking nesting: '[', '{', or '('
 };
-
 
 #define AST_NODE_LIST(V)  \
   V(CharNode)             \
@@ -1676,7 +1717,7 @@ class Parser {
     std::vector<AstNodePtr<charT>> parts;
 
     while (!is_brace_terminator()) {
-      // Only allow basic glob patterns within brace alternatives
+      // Allow all basic glob patterns AND extended glob groups within brace alternatives
       Token<charT>& tk = GetToken();
       
       switch (tk.Kind()) {
@@ -1704,6 +1745,15 @@ class Parser {
           parts.push_back(ParserBraceGroup());
           break;
           
+        case TokenKind::LPAREN:
+        case TokenKind::QUESTLPAREN:
+        case TokenKind::STARLPAREN:
+        case TokenKind::PLUSLPAREN:
+        case TokenKind::NEGLPAREN:
+        case TokenKind::ATLPAREN:
+          parts.push_back(ParserGroup());
+          break;
+          
         case TokenKind::SUB:
           Advance();
           parts.push_back(AstNodePtr<charT>(new CharNode<charT>('-')));
@@ -1722,7 +1772,7 @@ class Parser {
 
     return AstNodePtr<charT>(new ConcatNode<charT>(std::move(parts)));
   }
-
+  
   AstNodePtr<charT> ParserConcat() {
     auto check_end = [&]() -> bool {
       Token<charT>& tk = GetToken();

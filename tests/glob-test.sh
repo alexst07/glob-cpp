@@ -984,6 +984,155 @@ test_glob "*!" "test!" "true" "Exclamation literal with wildcards"
 echo ""
 
 # ============================================================================
+# NESTED DELIMITER SCOPE TESTS
+# ============================================================================
+# These tests verify that the lexer correctly tracks which delimiter type is
+# innermost, preventing characters from being treated as special in the wrong context. 
+
+echo "Test: Nested Scope - Pipe in Brackets inside Braces"
+test_glob_brace "{foo,[bar|baz]}" "foo" "true" "Nested: {foo,[bar|baz]} matches foo"
+test_glob_brace "{foo,[bar|baz]}" "|" "true" "Nested: {foo,[bar|baz]} matches '|' (pipe is literal inside brackets)"
+test_glob_brace "{foo,[bar|baz]}" "bar" "false" "Nested: {foo,[bar|baz]} does not match bar"
+test_glob_brace "{foo,[bar|baz]}" "baz" "false" "Nested: {foo,[bar|baz]} does not match baz"
+echo ""
+
+echo "Test: Nested Scope - Comma in Brackets inside Braces"
+test_glob_brace "{a,[b,c]}" "a" "true" "Nested: {a,[b,c]} matches a"
+test_glob_brace "{a,[b,c]}" "," "true" "Nested: {a,[b,c]} matches ',' (comma is literal inside brackets)"
+test_glob_brace "{a,[b,c]}" "b" "true" "Nested: {a,[b,c]} matches b"
+test_glob_brace "{a,[b,c]}" "c" "true" "Nested: {a,[b,c]} matches c"
+echo ""
+
+echo "Test: Nested Scope - Extended Glob in Braces"
+test_glob_brace "{foo,+(bar|baz)}" "foo" "true" "Nested: {foo,+(bar|baz)} matches foo"
+test_glob_brace "{foo,+(bar|baz)}" "bar" "true" "Nested: {foo,+(bar|baz)} matches bar"
+test_glob_brace "{foo,+(bar|baz)}" "baz" "true" "Nested: {foo,+(bar|baz)} matches baz"
+test_glob_brace "{foo,+(bar|baz)}" "barbaz" "true" "Nested: {foo,+(bar|baz)} matches barbaz"
+test_glob_brace "{foo,+(bar|baz)}" "xyz" "false" "Nested: {foo,+(bar|baz)} does not match xyz"
+echo ""
+
+echo "Test: Nested Scope - Simple Parens in Braces"
+test_glob_brace "{a,(b|c)}" "a" "true" "Nested: {a,(b|c)} matches a"
+test_glob_brace "{a,(b|c)}" "b" "true" "Nested: {a,(b|c)} matches b"
+test_glob_brace "{a,(b|c)}" "c" "true" "Nested: {a,(b|c)} matches c"
+test_glob_brace "{a,(b|c)}" "d" "false" "Nested: {a,(b|c)} does not match d"
+echo ""
+
+echo "Test: Nested Scope - Star Group in Braces"
+test_glob_brace "{pre,*(foo)bar}" "pre" "true" "Nested: {pre,*(foo)bar} matches pre"
+test_glob_brace "{pre,*(foo)bar}" "bar" "true" "Nested: {pre,*(foo)bar} matches bar"
+test_glob_brace "{pre,*(foo)bar}" "foobar" "true" "Nested: {pre,*(foo)bar} matches foobar"
+test_glob_brace "{pre,*(foo)bar}" "foofoofoobar" "true" "Nested: {pre,*(foo)bar} matches foofoofoobar"
+echo ""
+
+echo "Test: Nested Scope - Question Group in Braces"
+test_glob_brace "{x,?(a|b)}" "x" "true" "Nested: {x,?(a|b)} matches x"
+test_glob_brace "{x,?(a|b)}" "" "true" "Nested: {x,?(a|b)} matches empty (? matches 0 or 1)"
+test_glob_brace "{x,?(a|b)}" "a" "true" "Nested: {x,?(a|b)} matches a"
+test_glob_brace "{x,?(a|b)}" "b" "true" "Nested: {x,?(a|b)} matches b"
+test_glob_brace "{x,?(a|b)}" "ab" "false" "Nested: {x,?(a|b)} does not match ab"
+echo ""
+
+echo "Test: Nested Scope - At Group in Braces"
+test_glob_brace "{file,@(jpg|png)}" "file" "true" "Nested: {file,@(jpg|png)} matches file"
+test_glob_brace "{file,@(jpg|png)}" "jpg" "true" "Nested: {file,@(jpg|png)} matches jpg"
+test_glob_brace "{file,@(jpg|png)}" "png" "true" "Nested: {file,@(jpg|png)} matches png"
+test_glob_brace "{file,@(jpg|png)}" "gif" "false" "Nested: {file,@(jpg|png)} does not match gif"
+echo ""
+
+echo "Test: Nested Scope - Negation Group in Braces"
+test_glob_brace "{test,!(foo|bar)}" "test" "true" "Nested: {test,!(foo|bar)} matches test"
+test_glob_brace "{test,!(foo|bar)}" "baz" "true" "Nested: {test,!(foo|bar)} matches baz"
+test_glob_brace "{test,!(foo|bar)}" "foo" "false" "Nested: {test,!(foo|bar)} does not match foo"
+test_glob_brace "{test,!(foo|bar)}" "bar" "false" "Nested: {test,!(foo|bar)} does not match bar"
+echo ""
+
+echo "Test: Nested Scope - Pipe in Braces inside Parens"
+test_glob "(a|{b,c})" "a" "true" "Nested: (a|{b,c}) matches a"
+test_glob "(a|{b,c})" "b" "true" "Nested: (a|{b,c}) matches b (braces expand inside parens)"
+test_glob "(a|{b,c})" "c" "true" "Nested: (a|{b,c}) matches c (braces expand inside parens)"
+test_glob "(a|{b,c})" "d" "false" "Nested: (a|{b,c}) does not match d"
+echo ""
+
+echo "Test: Nested Scope - Double Dot in Brackets inside Braces"
+test_glob_brace "{a,[x..y]}" "a" "true" "Nested: {a,[x..y]} matches a"
+test_glob_brace "{a,[x..y]}" "." "true" "Nested: {a,[x..y]} matches '.' (. is literal inside brackets)"
+echo ""
+
+echo "Test: Nested Scope - Hyphen in Parens inside Braces"
+test_glob_brace "{foo,(a-z)}" "foo" "true" "Nested: {foo,(a-z)} matches foo"
+test_glob_brace "{foo,(a-z)}" "a-z" "true" "Nested: {foo,(a-z)} matches 'a-z' (hyphen is literal inside parens)"
+echo ""
+
+echo "Test: Nested Scope - Complex Three-Level Nesting"
+test_glob_brace "{a,([b|c,d])}" "a" "true" "Three-level: {a,([b|c,d])} matches a"
+test_glob_brace "{a,([b|c,d])}" "b" "true" "Three-level: {a,([b|c,d])} matches 'b' in character set"
+test_glob_brace "{a,([b|c,d])}" "|" "true" "Three-level: {a,([b|c,d])} matches '|' in character set"
+echo ""
+
+echo "Test: Nested Scope - Verifying Correct Context Switching"
+test_glob "{a,b}|{c,d}" "a|c" "true" "Context switch: {a,b}|{c,d} matches literal (pipe not in parens)"
+test_glob "(a|b){c,d}" "ad" "true" "Context switch: (a|b){c,d} matches ad"
+test_glob "(a|b){c,d}" "bc" "true" "Context switch: (a|b){c,d} matches bc"
+test_glob "(a|b){c,d}" "ac" "true" "Context switch: (a|b){c,d} matches ac"
+echo ""
+
+echo "Test: Nested Scope - Range Inside Brace Group"
+test_glob_brace "{pre{1..3}}" "pre1" "true" "Range in brace: {pre{1..3}} matches pre1"
+test_glob_brace "{pre{1..3}}" "pre2" "true" "Range in brace: {pre{1..3}} matches pre2"
+test_glob_brace "{pre{1..3}}" "pre3" "true" "Range in brace: {pre{1..3}} matches pre3"
+echo ""
+
+echo "Test: Nested Scope - Bracket Range Not Affected by Outer Brace"
+test_glob_brace "{test[a-c],other}" "testa" "true" "Outer brace: {test[a-c],other} matches testa"
+test_glob_brace "{test[a-c],other}" "testb" "true" "Outer brace: {test[a-c],other} matches testb"
+test_glob_brace "{test[a-c],other}" "other" "true" "Outer brace: {test[a-c],other} matches other"
+test_glob_brace "{test[a-c],other}" "test[a-c]" "false" "Outer brace: {test[a-c],other} does not match test[a-c] (brackets parsed correctly)"
+echo ""
+
+echo "Test: Nested Scope - Brackets Inside Parens Union"
+test_glob "(a|[b-d])" "a" "true" "Brackets in union: (a|[b-d]) matches a"
+test_glob "(a|[b-d])" "b" "true" "Brackets in union: (a|[b-d]) matches b"
+test_glob "(a|[b-d])" "c" "true" "Brackets in union: (a|[b-d]) matches c"
+test_glob "(a|[b-d])" "d" "true" "Brackets in union: (a|[b-d]) matches d"
+test_glob "(a|[b-d])" "e" "false" "Brackets in union: (a|[b-d]) does not match e"
+echo ""
+
+echo "Test: Nested Scope - Parens Inside Brackets (Literal)"
+test_glob "[a(b|c)d]" "a" "true" "Parens in brackets: [a(b|c)d] matches a"
+test_glob "[a(b|c)d]" "(" "true" "Parens in brackets: [a(b|c)d] matches ("
+test_glob "[a(b|c)d]" "b" "true" "Parens in brackets: [a(b|c)d] matches b"
+test_glob "[a(b|c)d]" "|" "true" "Parens in brackets: [a(b|c)d] matches |"
+test_glob "[a(b|c)d]" "c" "true" "Parens in brackets: [a(b|c)d] matches c"
+test_glob "[a(b|c)d]" ")" "true" "Parens in brackets: [a(b|c)d] matches )"
+test_glob "[a(b|c)d]" "d" "true" "Parens in brackets: [a(b|c)d] matches d"
+test_glob "[a(b|c)d]" "e" "false" "Parens in brackets: [a(b|c)d] does not match e"
+echo ""
+
+echo "Test: Nested Scope - Multiple Nesting Levels"
+test_glob_brace "{x,{y,[a|b]}}" "x" "true" "Multi-level: {x,{y,[a|b]}} matches x"
+test_glob_brace "{x,{y,[a|b]}}" "y" "true" "Multi-level: {x,{y,[a|b]}} matches y"
+test_glob_brace "{x,{y,[a|b]}}" "|" "true" "Multi-level: {x,{y,[a|b]}} matches '|' (| is literal)"
+test_glob_brace "{x,{y,[a|b]}}" "a" "true" "Multi-level: {x,{y,[a|b]}} matches a"
+echo ""
+
+echo "Test: Nested Scope - Extended Glob with Nested Braces"
+test_glob_brace "+(a|{b,c})" "a" "true" "Extended with braces: +(a|{b,c}) matches a"
+test_glob_brace "+(a|{b,c})" "b" "true" "Extended with braces: +(a|{b,c}) matches b (braces expand)"
+test_glob_brace "+(a|{b,c})" "c" "true" "Extended with braces: +(a|{b,c}) matches c (braces expand)"
+test_glob_brace "+(a|{b,c})" "aa" "true" "Extended with braces: +(a|{b,c}) matches aa"
+test_glob_brace "+(a|{b,c})" "abc" "true" "Extended with braces: +(a|{b,c}) matches abc"
+test_glob_brace "+(a|{b,c})" "d" "false" "Extended with braces: +(a|{b,c}) does not match d"
+echo ""
+
+echo "Test: Nested Scope - Complex Real-World Patterns"
+test_glob_brace "*.{@(jpg|png|gif),pdf}" "photo.jpg" "true" "Real-world: *.{@(jpg|png|gif),pdf} matches photo.jpg"
+test_glob_brace "*.{@(jpg|png|gif),pdf}" "image.png" "true" "Real-world: *.{@(jpg|png|gif),pdf} matches image.png"
+test_glob_brace "*.{@(jpg|png|gif),pdf}" "doc.pdf" "true" "Real-world: *.{@(jpg|png|gif),pdf} matches doc.pdf"
+test_glob_brace "*.{@(jpg|png|gif),pdf}" "file.txt" "false" "Real-world: *.{@(jpg|png|gif),pdf} does not match file.txt"
+echo ""
+
+# ============================================================================
 # GLOBSTAR (`**`) TESTS
 # ============================================================================
 # These test recursive directory matching with globstar (`**`)
