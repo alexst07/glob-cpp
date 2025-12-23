@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.5)
-project(glob-cpp VERSION 1.0.0)
+cmake_policy(SET CMP0048 NEW)
+project(glob-cpp VERSION 1.1.1)
 
 # Set policies to suppress warnings
 if(POLICY CMP0167)
