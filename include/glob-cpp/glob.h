@@ -186,7 +186,7 @@ class State {
     return matched_str_;
   }
 
-  virtual void ResetState() {}
+  virtual void ResetState() { matched_str_.clear(); }
 
  public:
   void SetMatchedStr(const String<charT>& str) {
@@ -274,6 +274,10 @@ class Automata {
 
   size_t FailState() const {
     return fail_state_;
+  }
+
+  size_t MatchState() const {
+    return match_state_;
   }
 
   Automata<charT>& SetFailState(size_t state_pos) {
@@ -616,6 +620,7 @@ class StateGroup: public State<charT> {
     , match_one_{false} {}
 
   void ResetState() override {
+    State<charT>::ResetState();
     match_one_ = false;
   }
 
